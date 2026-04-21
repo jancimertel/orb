@@ -326,9 +326,13 @@ func composeBody(text string, tools []toolEntry) (string, bool) {
 		if plainText == "" {
 			return "", false
 		}
-		// No tools: plaintext is fine, no need for HTML parse mode.
-		if len(plainText) <= telegramMsgLimit {
-			return plainText, false
+		// If the text contains markdown code markers, render as HTML so code
+		// blocks and inline spans get proper formatting.
+		if strings.ContainsRune(plainText, '`') {
+			htmlText := mdCodeToHTML(plainText)
+			if len(htmlText) <= telegramMsgLimit {
+				return htmlText, true
+			}
 		}
 		return plainText, false
 	}
@@ -350,7 +354,72 @@ func composeHTML(text string, tools []toolEntry) string {
 	b.WriteString("</blockquote>")
 	if text != "" {
 		b.WriteString("\n\n")
-		b.WriteString(html.EscapeString(text))
+		b.WriteString(mdCodeToHTML(text))
+	}
+	return b.String()
+}
+
+// mdCodeToHTML converts markdown code markers to Telegram HTML: triple-backtick
+// fenced blocks become <pre>/<pre><code class="language-xxx">, and inline
+// backticks become <code>. Everything else is HTML-escaped. An unclosed fence
+// at the end of the input is treated as open and closed virtually so the
+// emitted HTML stays well-formed during streaming.
+func mdCodeToHTML(text string) string {
+	var b strings.Builder
+	i := 0
+	for i < len(text) {
+		if strings.HasPrefix(text[i:], "```") {
+			langStart := i + 3
+			langEnd := langStart
+			for langEnd < len(text) && text[langEnd] != '\n' {
+				langEnd++
+			}
+			lang := strings.TrimSpace(text[langStart:langEnd])
+			contentStart := langEnd
+			if contentStart < len(text) && text[contentStart] == '\n' {
+				contentStart++
+			}
+			closeRel := strings.Index(text[contentStart:], "```")
+			var content string
+			if closeRel < 0 {
+				content = text[contentStart:]
+				i = len(text)
+			} else {
+				content = text[contentStart : contentStart+closeRel]
+				i = contentStart + closeRel + 3
+			}
+			content = strings.TrimRight(content, "\n")
+			if lang != "" {
+				b.WriteString(`<pre><code class="language-`)
+				b.WriteString(html.EscapeString(lang))
+				b.WriteString(`">`)
+				b.WriteString(html.EscapeString(content))
+				b.WriteString("</code></pre>")
+			} else {
+				b.WriteString("<pre>")
+				b.WriteString(html.EscapeString(content))
+				b.WriteString("</pre>")
+			}
+			continue
+		}
+		if text[i] == '`' {
+			if rel := strings.IndexByte(text[i+1:], '`'); rel >= 0 {
+				nl := strings.IndexByte(text[i+1:], '\n')
+				if nl < 0 || rel < nl {
+					b.WriteString("<code>")
+					b.WriteString(html.EscapeString(text[i+1 : i+1+rel]))
+					b.WriteString("</code>")
+					i = i + 1 + rel + 1
+					continue
+				}
+			}
+		}
+		j := i
+		for j < len(text) && text[j] != '`' {
+			j++
+		}
+		b.WriteString(html.EscapeString(text[i:j]))
+		i = j
 	}
 	return b.String()
 }
