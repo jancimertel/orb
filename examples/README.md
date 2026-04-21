@@ -26,7 +26,9 @@ After adding or editing files, issue `/agent reload` (or `/command reload`,
 │   ├── write-tests.md
 │   └── explain-code.md
 ├── skills/              # native Claude Code skills — auto-discovered behavior packs (see via /skill)
-│   └── commit/
+│   ├── commit/
+│   │   └── SKILL.md
+│   └── gh/
 │       └── SKILL.md
 └── jobs/                # scheduled background tasks (use via /job)
     ├── sysadmin.md

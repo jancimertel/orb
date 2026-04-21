@@ -20,6 +20,8 @@ FROM node:22-slim
 # git: cloning + committing. openssh-client: not used today but harmless
 # and useful if we ever add ssh-based remotes. tini: PID 1 reaper so the
 # Claude subprocess and its children get cleaned up on container stop.
+# gh: GitHub CLI for PR/issue workflows, auth'd via $GH_TOKEN (wired from
+# GITHUB_PAT at bot startup).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git openssh-client ca-certificates tini curl \
   && rm -rf /var/lib/apt/lists/* \
@@ -29,6 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm /tmp/go.tar.gz \
   && ln -s /usr/local/go/bin/go /usr/local/bin/go \
   && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt \
+  && GH_VERSION=2.65.0 \
+  && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${ARCH}.tar.gz" -o /tmp/gh.tar.gz \
+  && tar -C /tmp -xzf /tmp/gh.tar.gz \
+  && mv "/tmp/gh_${GH_VERSION}_linux_${ARCH}/bin/gh" /usr/local/bin/gh \
+  && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${ARCH}" \
   && npm install -g @anthropic-ai/claude-code \
   # node:22-slim already ships a `node` user at uid 1000; drop it so our
   # `bot` user can take that UID (the conventional operator UID on Linux

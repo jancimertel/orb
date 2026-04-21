@@ -69,6 +69,12 @@ func run() error {
 	}
 	gitCancel()
 
+	// Mirror GITHUB_PAT into GH_TOKEN so the `gh` CLI inside Claude
+	// subprocesses authenticates without a separate `gh auth login`. The
+	// Claude runner inherits os.Environ() for each spawn, so setting this
+	// here is enough.
+	os.Setenv("GH_TOKEN", cfg.GithubPAT)
+
 	if err := os.MkdirAll(cfg.WorkspaceRoot, 0o755); err != nil {
 		return fmt.Errorf("workspace: mkdir: %w", err)
 	}
