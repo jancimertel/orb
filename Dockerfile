@@ -21,8 +21,14 @@ FROM node:22-slim
 # and useful if we ever add ssh-based remotes. tini: PID 1 reaper so the
 # Claude subprocess and its children get cleaned up on container stop.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git openssh-client ca-certificates tini golang \
+      git openssh-client ca-certificates tini curl \
   && rm -rf /var/lib/apt/lists/* \
+  && ARCH="$(dpkg --print-architecture)" \
+  && curl -fsSL "https://go.dev/dl/go1.25.3.linux-${ARCH}.tar.gz" -o /tmp/go.tar.gz \
+  && tar -C /usr/local -xzf /tmp/go.tar.gz \
+  && rm /tmp/go.tar.gz \
+  && ln -s /usr/local/go/bin/go /usr/local/bin/go \
+  && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt \
   && npm install -g @anthropic-ai/claude-code \
   # node:22-slim already ships a `node` user at uid 1000; drop it so our
   # `bot` user can take that UID (the conventional operator UID on Linux

@@ -21,14 +21,25 @@ After adding or editing files, issue `/agent reload` (or `/skill reload`,
 │   ├── brief.md
 │   ├── rude.md
 │   └── objective.md
-├── commands/            # skills (use via /skill <name>) — native Claude Code format
+├── commands/            # slash-command aliases (use via /skill <name>) — native Claude Code format
 │   ├── review-pr.md
 │   ├── write-tests.md
 │   └── explain-code.md
+├── skills/              # native Claude Code skills — behavior guidance, auto-discovered by claude
+│   └── commit/
+│       └── SKILL.md
 └── jobs/                # scheduled background tasks (use via /job)
     ├── sysadmin.md
     └── dbadmin.md
 ```
+
+`commands/` vs. `skills/`:
+- **`commands/`** — short, named recipes invoked explicitly (aliases /
+  one-shot preambles). The bot exposes these via `/skill <name>` in
+  Telegram.
+- **`skills/<name>/SKILL.md`** — native Claude Code skill packs. Describe
+  *correct behavior in a situation*; Claude auto-selects them based on the
+  `description` frontmatter. Not routed through the bot's `/skill` command.
 
 See [../SKILLS_PERSONA_JOBS.md](../SKILLS_PERSONA_JOBS.md) for the full
 design and the frontmatter schemas.
