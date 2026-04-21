@@ -1,0 +1,25 @@
+services:
+  bot:
+    platform: linux/amd64
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - claude-home:/data/.claude
+      - workspaces:/data/workspaces
+      - state:/data/state
+      # Host-managed secrets file (e.g. `secrets/github_pat`). Read-only.
+      # GITHUB_PAT in .env is the authoritative source; this mount exists
+      # for operators who prefer a file-on-disk workflow.
+      - ./secrets:/data/secrets:ro
+    # Main.go reserves 20s for graceful shutdown; match it here so compose
+    # doesn't SIGKILL while we're draining the Telegram handler.
+    stop_grace_period: 20s
+
+volumes:
+  claude-home:
+  workspaces:
+  state:
