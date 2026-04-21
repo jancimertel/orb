@@ -72,14 +72,14 @@ func (r *Router) handleFallback(ctx *th.Context, u telego.Update) error {
 				"  docker compose exec -it bot claude login")
 	}
 
-	// Armed skill? Apply it once and clear. On a missing-skill race (user
-	// reloaded between /skill arm and sending text), fall back to a plain
-	// turn rather than dropping the message.
-	if name := r.pendingSkills.Take(chatID); name != "" {
-		if sk, err := r.lookupSkill(ctx, chatID, name); err == nil {
-			return r.runSkill(ctx, chatID, sk, u.Message.Text)
+	// Armed command? Apply it once and clear. On a missing-command race
+	// (user reloaded between /command arm and sending text), fall back to a
+	// plain turn rather than dropping the message.
+	if name := r.pendingCommands.Take(chatID); name != "" {
+		if cm, err := r.lookupCommand(ctx, chatID, name); err == nil {
+			return r.runCommand(ctx, chatID, cm, u.Message.Text)
 		}
-		_ = r.reply(ctx, chatID, "armed skill "+name+" no longer available — running plain turn")
+		_ = r.reply(ctx, chatID, "armed command "+name+" no longer available — running plain turn")
 	}
 	return r.driveTurn(ctx, chatID, u.Message.Text)
 }

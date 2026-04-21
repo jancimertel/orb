@@ -14,13 +14,16 @@ func TestSeed_EmptyDst_Copies(t *testing.T) {
 	mustWrite(t, filepath.Join(src, "agents", "rude.md"), "---\nname: rude\n---\nbody")
 	mustWrite(t, filepath.Join(src, "commands", "review-pr.md"), "---\ndescription: x\n---\nbody")
 	mustWrite(t, filepath.Join(src, "jobs", "sysadmin.md"), "---\nname: sysadmin\n---\nbody")
+	mustWrite(t, filepath.Join(src, "skills", "commit", "SKILL.md"),
+		"---\nname: commit\ndescription: x\n---\nbody")
+	mustWrite(t, filepath.Join(src, "skills", "commit", "references", "notes.md"), "extra")
 
 	results, err := Seed(src, dst, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 3 {
-		t.Fatalf("want 3 results, got %d", len(results))
+	if len(results) != 4 {
+		t.Fatalf("want 4 results, got %d", len(results))
 	}
 
 	byDir := map[string]SeedResult{}
@@ -36,8 +39,40 @@ func TestSeed_EmptyDst_Copies(t *testing.T) {
 	if byDir["jobs"].Copied != 1 {
 		t.Errorf("jobs copied: got %d, want 1", byDir["jobs"].Copied)
 	}
+	if byDir["skills"].Copied != 1 {
+		t.Errorf("skills copied: got %d, want 1 (one skill dir)", byDir["skills"].Copied)
+	}
 	assertFile(t, filepath.Join(dst, "agents", "brief.md"))
 	assertFile(t, filepath.Join(dst, "commands", "review-pr.md"))
+	assertFile(t, filepath.Join(dst, "skills", "commit", "SKILL.md"))
+	assertFile(t, filepath.Join(dst, "skills", "commit", "references", "notes.md"))
+}
+
+func TestSeed_Skills_ExistingSkillDirSkips(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	mustWrite(t, filepath.Join(src, "skills", "commit", "SKILL.md"), "src")
+	// User has their own skill already.
+	mustWrite(t, filepath.Join(dst, "skills", "custom", "SKILL.md"), "user")
+
+	results, err := Seed(src, dst, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skillsRow SeedResult
+	for _, r := range results {
+		if r.Dir == "skills" {
+			skillsRow = r
+		}
+	}
+	if !skillsRow.Skipped {
+		t.Error("skills should be skipped because user content exists")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "skills", "commit", "SKILL.md")); !os.IsNotExist(err) {
+		t.Error("src skill should not have been copied into non-empty dst")
+	}
+	assertFile(t, filepath.Join(dst, "skills", "custom", "SKILL.md"))
 }
 
 func TestSeed_ExistingDst_Skipped(t *testing.T) {

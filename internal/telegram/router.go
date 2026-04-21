@@ -29,11 +29,12 @@ type Router struct {
 	agents      *agent.Loader
 	cfg         *config.Config
 	logger      *slog.Logger
-	approvals     *approvalStore
-	gitConfirms   *gitConfirmStore
-	status        *statusTracker
-	sessionAllow  *sessionAllowStore
-	pendingSkills *pendingSkillStore
+	approvals       *approvalStore
+	gitConfirms     *gitConfirmStore
+	status          *statusTracker
+	sessionAllow    *sessionAllowStore
+	pendingCommands *pendingCommandStore
+	memoryConfirms  *memoryConfirmStore
 }
 
 func NewRouter(
@@ -57,11 +58,12 @@ func NewRouter(
 		agents:      agents,
 		cfg:         cfg,
 		logger:      logger,
-		approvals:     newApprovalStore(),
-		gitConfirms:   newGitConfirmStore(60 * time.Second),
-		status:        newStatusTracker(),
-		sessionAllow:  newSessionAllowStore(),
-		pendingSkills: newPendingSkillStore(),
+		approvals:       newApprovalStore(),
+		gitConfirms:     newGitConfirmStore(60 * time.Second),
+		status:          newStatusTracker(),
+		sessionAllow:    newSessionAllowStore(),
+		pendingCommands: newPendingCommandStore(),
+		memoryConfirms:  newMemoryConfirmStore(memoryConfirmTTL),
 	}
 }
 
@@ -74,7 +76,9 @@ func (r *Router) Register(h *th.BotHandler) {
 	r.registerRepo(h)
 	r.registerRuntime(h)
 	r.registerAgent(h)
+	r.registerCommand(h)
 	r.registerSkill(h)
+	r.registerMemory(h)
 	r.registerContext(h)
 	r.registerGit(h)
 	r.registerApproval(h)

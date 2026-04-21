@@ -9,8 +9,8 @@ of these into the bot's live `.claude/` trees:
 - **Per-repo (override):** `<cloned-repo>/.claude/…` — repo-local wins on
   name collisions.
 
-After adding or editing files, issue `/agent reload` (or `/skill reload`,
-`/job reload`) in Telegram so the bot re-scans.
+After adding or editing files, issue `/agent reload` (or `/command reload`,
+`/skill reload`, `/job reload`) in Telegram so the bot re-scans.
 
 ## Layout
 
@@ -21,11 +21,11 @@ After adding or editing files, issue `/agent reload` (or `/skill reload`,
 │   ├── brief.md
 │   ├── rude.md
 │   └── objective.md
-├── commands/            # slash-command aliases (use via /skill <name>) — native Claude Code format
+├── commands/            # one-shot preambles (use via /command <name>) — native Claude Code format
 │   ├── review-pr.md
 │   ├── write-tests.md
 │   └── explain-code.md
-├── skills/              # native Claude Code skills — behavior guidance, auto-discovered by claude
+├── skills/              # native Claude Code skills — auto-discovered behavior packs (see via /skill)
 │   └── commit/
 │       └── SKILL.md
 └── jobs/                # scheduled background tasks (use via /job)
@@ -35,11 +35,12 @@ After adding or editing files, issue `/agent reload` (or `/skill reload`,
 
 `commands/` vs. `skills/`:
 - **`commands/`** — short, named recipes invoked explicitly (aliases /
-  one-shot preambles). The bot exposes these via `/skill <name>` in
+  one-shot preambles). The bot exposes these via `/command <name>` in
   Telegram.
 - **`skills/<name>/SKILL.md`** — native Claude Code skill packs. Describe
   *correct behavior in a situation*; Claude auto-selects them based on the
-  `description` frontmatter. Not routed through the bot's `/skill` command.
+  `description` frontmatter. The bot's `/skill` command lists installed
+  skills for visibility but does not invoke them — Claude decides when.
 
 See [../SKILLS_PERSONA_JOBS.md](../SKILLS_PERSONA_JOBS.md) for the full
 design and the frontmatter schemas.

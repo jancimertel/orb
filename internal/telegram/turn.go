@@ -39,20 +39,37 @@ func (r *Router) driveTurn(ctx *th.Context, chatID int64, prompt string) error {
 
 	agentName := r.activeAgentName(ctx, chatID)
 	agentBody := r.resolveAgentBody(ctx, chatID)
+	// MemoryPreamble wants the active repo root (empty → user-only). The
+	// runner cwd would falsely match the scratch dir when no repo is
+	// selected and try to read project memory from there.
+	memoryBlock := r.agents.MemoryPreamble(r.activeRepoRoot(ctx, chatID))
 
 	// The Claude Code CLI's --append-system-prompt is not reliably honored
 	// with stream-json input (we saw silent drops in production), so we
-	// inject the agent body as a user-turn preamble on the FIRST turn of a
-	// fresh session. After that, it's part of session history and applies
-	// automatically via --resume. /agent change clears active_session_id,
-	// so the next turn is always a "fresh session" for injection purposes.
+	// inject the agent body (and memory block) as a user-turn preamble on
+	// the FIRST turn of a fresh session. After that, it's part of session
+	// history and applies automatically via --resume. /agent change clears
+	// active_session_id, so the next turn is always a "fresh session" for
+	// injection purposes. /remember tells the user to /new if they want
+	// the new entry to take effect in the current conversation.
 	preambleApplied := false
-	if agentBody != "" && cs.ActiveSessionID == "" {
-		prompt = fmt.Sprintf(
-			"<system-instruction agent=%q>\n%s\n</system-instruction>\n\n%s",
-			agentName, agentBody, prompt,
-		)
-		preambleApplied = true
+	memoryInjected := false
+	if cs.ActiveSessionID == "" {
+		var pre strings.Builder
+		if agentBody != "" {
+			fmt.Fprintf(&pre,
+				"<system-instruction agent=%q>\n%s\n</system-instruction>\n\n",
+				agentName, agentBody)
+			preambleApplied = true
+		}
+		if memoryBlock != "" {
+			pre.WriteString(memoryBlock)
+			pre.WriteString("\n\n")
+			memoryInjected = true
+		}
+		if pre.Len() > 0 {
+			prompt = pre.String() + prompt
+		}
 	}
 
 	turnID := newTurnID()
@@ -64,6 +81,8 @@ func (r *Router) driveTurn(ctx *th.Context, chatID int64, prompt string) error {
 		"agent", cs.ActiveAgent,
 		"agent_body_chars", len(agentBody),
 		"agent_preamble_applied", preambleApplied,
+		"memory_chars", len(memoryBlock),
+		"memory_injected", memoryInjected,
 	)
 
 	turn, err := r.registry.StartTurn(chatID, claude.TurnOpts{

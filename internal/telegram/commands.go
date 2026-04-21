@@ -20,7 +20,10 @@ var botCommands = []telego.BotCommand{
 	{Command: "session", Description: "browse / resume past sessions"},
 	{Command: "model", Description: "list or switch Claude model"},
 	{Command: "agent", Description: "list or switch chat-sticky agent (system prompt)"},
-	{Command: "skill", Description: "one-shot skill from .claude/commands/"},
+	{Command: "command", Description: "one-shot preamble from .claude/commands/"},
+	{Command: "skill", Description: "list native Claude skills from .claude/skills/"},
+	{Command: "remember", Description: "append to user or project memory"},
+	{Command: "memory", Description: "show / clear persistent memory scopes"},
 	{Command: "context", Description: "show active agent/skill/repo + loader paths"},
 
 	{Command: "repo", Description: "list / add / remove repos"},

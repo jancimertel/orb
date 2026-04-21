@@ -10,30 +10,41 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Skill is one parsed `.claude/commands/<name>.md` file. The filename (minus
-// .md) is the command name — there is no `name:` field in the native Claude
-// Code command schema.
+// Skill is one parsed `.claude/skills/<name>/SKILL.md` file — the native
+// Claude Code skill format. Skills are **auto-discovered** by Claude
+// inside the subprocess based on their description; the bot does not
+// inject or invoke them. This type exists only so the Telegram UI can
+// list / inspect what's installed, for operator visibility.
+//
+// Layout:
+//
+//	.claude/skills/
+//	  commit/
+//	    SKILL.md         ← frontmatter: name, description, …
+//	    references/...   ← arbitrary supporting files (we ignore them)
+//
+// The directory name is authoritative for the skill's identity; the
+// `name:` frontmatter field is informational. Missing SKILL.md = skip
+// the directory silently.
 type Skill struct {
-	Name        string   // filename sans .md
-	Description string   // from native `description:`
-	Body        string   // markdown body — supports the $ARGUMENTS placeholder
-	Triggers    []string // optional bot-specific `x-triggers:`
-	RequiresRepo bool    // optional bot-specific `x-requires-repo:`
-
-	Source string // absolute path the file was read from
-	Scope  string // "global" or "repo"
+	Name        string // directory name (authoritative) — falls back to `name:` if they differ
+	Description string // from frontmatter `description:`
+	Body        string // markdown body after the frontmatter
+	Source      string // absolute path to SKILL.md
+	Scope       string // "global" or "repo"
 }
 
 // Skills returns every skill visible for the given repo (repoRoot may be
-// empty). Repo-local entries override global ones on name collision. Sorted.
+// empty). Repo-local entries override global ones on name collision.
+// Sorted by name.
 func (l *Loader) Skills(repoRoot string) ([]Skill, error) {
 	byName := map[string]Skill{}
 
-	for _, s := range l.scanSkills(filepath.Join(l.GlobalRoot, ".claude", "commands"), "global") {
+	for _, s := range l.scanSkills(filepath.Join(l.GlobalRoot, ".claude", "skills"), "global") {
 		byName[s.Name] = s
 	}
 	if repoRoot != "" {
-		for _, s := range l.scanSkills(filepath.Join(repoRoot, ".claude", "commands"), "repo") {
+		for _, s := range l.scanSkills(filepath.Join(repoRoot, ".claude", "skills"), "repo") {
 			byName[s.Name] = s
 		}
 	}
@@ -46,8 +57,8 @@ func (l *Loader) Skills(repoRoot string) ([]Skill, error) {
 	return out, nil
 }
 
-// Skill resolves one skill by name against the given repo. Repo-local wins.
-// Returns ErrNotFound if absent.
+// Skill resolves one skill by directory name against the given repo.
+// Repo-local wins. Returns ErrNotFound if absent.
 func (l *Loader) Skill(repoRoot, name string) (Skill, error) {
 	skills, err := l.Skills(repoRoot)
 	if err != nil {
@@ -61,8 +72,9 @@ func (l *Loader) Skill(repoRoot, name string) (Skill, error) {
 	return Skill{}, ErrNotFound
 }
 
-// scanSkills walks dir and returns every valid skill under it. Missing
-// directory → empty slice (not an error). Malformed files are skipped.
+// scanSkills walks dir looking for `<skill>/SKILL.md` entries. Missing dir
+// → empty slice (not an error). Malformed files / missing SKILL.md are
+// skipped silently.
 func (l *Loader) scanSkills(dir, scope string) []Skill {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -70,14 +82,19 @@ func (l *Loader) scanSkills(dir, scope string) []Skill {
 	}
 	var out []Skill
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+		if !e.IsDir() {
 			continue
 		}
-		path := filepath.Join(dir, e.Name())
+		path := filepath.Join(dir, e.Name(), "SKILL.md")
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
 		s, err := parseSkillFile(path)
 		if err != nil {
 			continue
 		}
+		// Directory name is authoritative; frontmatter `name` is informational.
+		s.Name = e.Name()
 		s.Scope = scope
 		out = append(out, s)
 	}
@@ -91,40 +108,19 @@ func parseSkillFile(path string) (Skill, error) {
 	}
 	frontmatter, body := splitFrontmatter(raw)
 
-	// Native Claude Code command frontmatter uses kebab-case + optional bot
-	// extensions prefixed x-.
 	var fm struct {
-		Description  string   `yaml:"description"`
-		ArgumentHint string   `yaml:"argument-hint"`
-		AllowedTools []string `yaml:"allowed-tools"`
-
-		XTriggers    []string `yaml:"x-triggers"`
-		XRequiresRepo bool    `yaml:"x-requires-repo"`
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
 	}
 	if len(frontmatter) > 0 {
 		if err := yaml.Unmarshal(frontmatter, &fm); err != nil {
 			return Skill{}, fmt.Errorf("parse frontmatter %s: %w", path, err)
 		}
 	}
-	_ = fm.ArgumentHint
-	_ = fm.AllowedTools
-
 	return Skill{
-		Name:         strings.TrimSuffix(filepath.Base(path), ".md"),
-		Description:  fm.Description,
-		Body:         strings.TrimSpace(body),
-		Triggers:     fm.XTriggers,
-		RequiresRepo: fm.XRequiresRepo,
-		Source:       path,
+		Name:        fm.Name,
+		Description: fm.Description,
+		Body:        strings.TrimSpace(body),
+		Source:      path,
 	}, nil
-}
-
-// RenderBody returns the skill body with $ARGUMENTS substituted. An empty
-// args string still substitutes (leaving a literal empty span where the
-// placeholder was), matching Claude Code's own behavior.
-func (s Skill) RenderBody(args string) string {
-	if !strings.Contains(s.Body, "$ARGUMENTS") {
-		return s.Body
-	}
-	return strings.ReplaceAll(s.Body, "$ARGUMENTS", args)
 }

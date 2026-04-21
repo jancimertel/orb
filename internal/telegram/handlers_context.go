@@ -1,12 +1,15 @@
 package telegram
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
+
+	"github.com/jancimertel/orb/internal/agent"
 )
 
 // registerContext wires /context. This is a diagnostic view of everything
@@ -61,19 +64,49 @@ func (r *Router) handleContext(ctx *th.Context, u telego.Update) error {
 		fmt.Fprintf(&sb, "\nAgent:   %s (not found on disk — did you delete the file?)\n", agentName)
 	}
 
-	// --- Armed skill ---
-	if armed := r.pendingSkills.Peek(chatID); armed != "" {
-		fmt.Fprintf(&sb, "\nArmed skill: %s — applies to your next text message\n", armed)
+	// --- Armed command ---
+	if armed := r.pendingCommands.Peek(chatID); armed != "" {
+		fmt.Fprintf(&sb, "\nArmed command: %s — applies to your next text message\n", armed)
+	}
+
+	// --- Memory ---
+	sb.WriteString("\n--- memory ---\n")
+	for _, scope := range []string{agent.ScopeUser, agent.ScopeProject} {
+		m, err := r.agents.Memory(repoRoot, scope)
+		if err != nil {
+			if errors.Is(err, agent.ErrNoRepo) {
+				fmt.Fprintf(&sb, "  %s: (no active repo)\n", scope)
+				continue
+			}
+			fmt.Fprintf(&sb, "  %s: error: %v\n", scope, err)
+			continue
+		}
+		if !m.Exists {
+			fmt.Fprintf(&sb, "  %s: (empty)  %s\n", scope, m.Path)
+			continue
+		}
+		fmt.Fprintf(&sb, "  %s: %d bytes, %d entries  %s\n",
+			scope, len(m.Body), countBullets(m.Body), m.Path)
+	}
+	preamble := r.agents.MemoryPreamble(repoRoot)
+	if preamble == "" {
+		sb.WriteString("  (nothing to inject)\n")
+	} else {
+		fmt.Fprintf(&sb, "  Applied as: %s\n",
+			ternary(cs.ActiveSessionID == "", "user-message preamble on this turn",
+				"baked into session history (new entries need /new)"))
 	}
 
 	// --- Loader search paths ---
 	sb.WriteString("\n--- loader search paths ---\n")
 	fmt.Fprintf(&sb, "Global agents:   %s\n", filepath.Join(r.cfg.HomeDir, ".claude", "agents"))
 	fmt.Fprintf(&sb, "Global commands: %s\n", filepath.Join(r.cfg.HomeDir, ".claude", "commands"))
+	fmt.Fprintf(&sb, "Global skills:   %s\n", filepath.Join(r.cfg.HomeDir, ".claude", "skills"))
 	fmt.Fprintf(&sb, "Global jobs:     %s\n", filepath.Join(r.cfg.HomeDir, ".claude", "jobs"))
 	if repoRoot != "" {
 		fmt.Fprintf(&sb, "Repo agents:     %s\n", filepath.Join(repoRoot, ".claude", "agents"))
 		fmt.Fprintf(&sb, "Repo commands:   %s\n", filepath.Join(repoRoot, ".claude", "commands"))
+		fmt.Fprintf(&sb, "Repo skills:     %s\n", filepath.Join(repoRoot, ".claude", "skills"))
 		fmt.Fprintf(&sb, "Repo jobs:       %s\n", filepath.Join(repoRoot, ".claude", "jobs"))
 	}
 
@@ -91,7 +124,16 @@ func (r *Router) handleContext(ctx *th.Context, u telego.Update) error {
 		sb.WriteString("  (none)\n")
 	}
 
-	sb.WriteString("\n--- installed skills ---\n")
+	sb.WriteString("\n--- installed commands ---\n")
+	if cmds, err := r.agents.Commands(repoRoot); err == nil && len(cmds) > 0 {
+		for _, c := range cmds {
+			fmt.Fprintf(&sb, "  %s  (%s)\n", c.Name, c.Scope)
+		}
+	} else {
+		sb.WriteString("  (none)\n")
+	}
+
+	sb.WriteString("\n--- installed skills (auto-discovered) ---\n")
 	if skills, err := r.agents.Skills(repoRoot); err == nil && len(skills) > 0 {
 		for _, s := range skills {
 			fmt.Fprintf(&sb, "  %s  (%s)\n", s.Name, s.Scope)
