@@ -144,6 +144,20 @@ func run() error {
 		logger.Warn("seed examples failed", "err", err)
 	}
 
+	// Install and enable the configured Claude Code plugins onto the
+	// persistent .claude volume. Runs at startup (not build) because plugins
+	// live under $HOME/.claude/plugins, which is the claude-home volume and
+	// shadows any image-baked content. Non-fatal: the bot starts regardless.
+	if err := claude.EnsurePlugins(claude.PluginConfig{
+		CLIPath:        cfg.ClaudeCLI,
+		HomeDir:        cfg.HomeDir,
+		MarketplaceDir: cfg.PluginMarketplaceDir,
+		Plugins:        cfg.EnabledPlugins,
+		Logger:         logger,
+	}); err != nil {
+		logger.Warn("ensure plugins failed", "err", err)
+	}
+
 	router := telegram.NewRouter(bot, store, registry, usageTracker, sessionLister, repoManager, agentLoader, cfg, logger)
 	router.Register(handler)
 
