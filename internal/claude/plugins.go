@@ -96,12 +96,13 @@ func execRunner(ctx context.Context, home, name string, args ...string) ([]byte,
 // EnsurePlugins registers the configured marketplace source and installs +
 // enables each configured plugin onto $HOME. Idempotent: already-installed
 // plugins are skipped. All failures are logged and non-fatal — the bot must
-// start even if plugin provisioning fails.
-func EnsurePlugins(cfg PluginConfig) error {
-	return ensurePlugins(cfg, execRunner)
+// start even if plugin provisioning fails. ctx bounds the (potentially
+// network-bound, first-boot-only) CLI calls so shutdown stays responsive.
+func EnsurePlugins(ctx context.Context, cfg PluginConfig) error {
+	return ensurePlugins(ctx, cfg, execRunner)
 }
 
-func ensurePlugins(cfg PluginConfig, run commandRunner) error {
+func ensurePlugins(ctx context.Context, cfg PluginConfig, run commandRunner) error {
 	if len(cfg.Plugins) == 0 {
 		return nil
 	}
@@ -112,7 +113,7 @@ func ensurePlugins(cfg PluginConfig, run commandRunner) error {
 
 	// 1. Register the marketplace from its source so installs can resolve.
 	//    Best-effort: a prior boot may already have registered it.
-	mctx, mcancel := context.WithTimeout(context.Background(), 60*time.Second)
+	mctx, mcancel := context.WithTimeout(ctx, 60*time.Second)
 	if out, err := run(mctx, cfg.HomeDir, cfg.CLIPath, "plugin", "marketplace", "add", cfg.MarketplaceSource); err != nil {
 		logger.Warn("plugin marketplace add failed", "source", cfg.MarketplaceSource, "err", err, "output", string(out))
 	}
@@ -133,7 +134,7 @@ func ensurePlugins(cfg PluginConfig, run commandRunner) error {
 			present = append(present, p)
 			continue
 		}
-		ictx, icancel := context.WithTimeout(context.Background(), 120*time.Second)
+		ictx, icancel := context.WithTimeout(ctx, 120*time.Second)
 		out, err := run(ictx, cfg.HomeDir, cfg.CLIPath, "plugin", "install", p, "--scope", "user")
 		icancel()
 		if err != nil {

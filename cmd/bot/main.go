@@ -150,7 +150,7 @@ func run() error {
 	// shadows image-baked content, and the official marketplace must be added
 	// from its GitHub source (the reserved name rejects local paths). Fetches
 	// over the network on first boot only. Non-fatal: the bot starts regardless.
-	if err := claude.EnsurePlugins(claude.PluginConfig{
+	if err := claude.EnsurePlugins(ctx, claude.PluginConfig{
 		CLIPath:           cfg.ClaudeCLI,
 		HomeDir:           cfg.HomeDir,
 		MarketplaceSource: cfg.PluginMarketplaceSource,

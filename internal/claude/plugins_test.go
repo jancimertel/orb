@@ -182,7 +182,7 @@ func TestEnsurePlugins_FreshInstall(t *testing.T) {
 	home := t.TempDir()
 	rr := &recordingRunner{}
 
-	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+	if err := ensurePlugins(context.Background(), baseConfig(home), rr.run); err != nil {
 		t.Fatal(err)
 	}
 
@@ -210,7 +210,7 @@ func TestEnsurePlugins_SkipsInstalled(t *testing.T) {
 	writeInstalledPlugins(t, home, "superpowers@claude-plugins-official")
 	rr := &recordingRunner{}
 
-	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+	if err := ensurePlugins(context.Background(), baseConfig(home), rr.run); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +232,7 @@ func TestEnsurePlugins_InstallFailureIsNonFatal(t *testing.T) {
 	home := t.TempDir()
 	rr := &recordingRunner{failInstall: map[string]bool{"superpowers@claude-plugins-official": true}}
 
-	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+	if err := ensurePlugins(context.Background(), baseConfig(home), rr.run); err != nil {
 		t.Fatalf("install failure must be non-fatal, got %v", err)
 	}
 
@@ -250,7 +250,7 @@ func TestEnsurePlugins_MarketplaceFailureIsNonFatal(t *testing.T) {
 	home := t.TempDir()
 	rr := &recordingRunner{failMarketplace: true}
 
-	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+	if err := ensurePlugins(context.Background(), baseConfig(home), rr.run); err != nil {
 		t.Fatalf("marketplace failure must be non-fatal, got %v", err)
 	}
 	// Installs are still attempted despite the marketplace add failing.
@@ -265,7 +265,7 @@ func TestEnsurePlugins_NoPlugins(t *testing.T) {
 	cfg := baseConfig(home)
 	cfg.Plugins = nil
 
-	if err := ensurePlugins(cfg, rr.run); err != nil {
+	if err := ensurePlugins(context.Background(), cfg, rr.run); err != nil {
 		t.Fatal(err)
 	}
 	if len(rr.calls) != 0 {
