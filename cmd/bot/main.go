@@ -146,14 +146,16 @@ func run() error {
 
 	// Install and enable the configured Claude Code plugins onto the
 	// persistent .claude volume. Runs at startup (not build) because plugins
-	// live under $HOME/.claude/plugins, which is the claude-home volume and
-	// shadows any image-baked content. Non-fatal: the bot starts regardless.
+	// live under $HOME/.claude/plugins, which is the claude-home volume that
+	// shadows image-baked content, and the official marketplace must be added
+	// from its GitHub source (the reserved name rejects local paths). Fetches
+	// over the network on first boot only. Non-fatal: the bot starts regardless.
 	if err := claude.EnsurePlugins(claude.PluginConfig{
-		CLIPath:        cfg.ClaudeCLI,
-		HomeDir:        cfg.HomeDir,
-		MarketplaceDir: cfg.PluginMarketplaceDir,
-		Plugins:        cfg.EnabledPlugins,
-		Logger:         logger,
+		CLIPath:           cfg.ClaudeCLI,
+		HomeDir:           cfg.HomeDir,
+		MarketplaceSource: cfg.PluginMarketplaceSource,
+		Plugins:           cfg.EnabledPlugins,
+		Logger:            logger,
 	}); err != nil {
 		logger.Warn("ensure plugins failed", "err", err)
 	}

@@ -37,8 +37,8 @@ func TestLoad_EnabledPluginsDefault(t *testing.T) {
 		}
 	}
 
-	if cfg.PluginMarketplaceDir != "/opt/bot/marketplace" {
-		t.Errorf("PluginMarketplaceDir = %q, want /opt/bot/marketplace", cfg.PluginMarketplaceDir)
+	if cfg.PluginMarketplaceSource != "anthropics/claude-plugins-official" {
+		t.Errorf("PluginMarketplaceSource = %q, want anthropics/claude-plugins-official", cfg.PluginMarketplaceSource)
 	}
 }
 

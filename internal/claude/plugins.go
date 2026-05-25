@@ -75,11 +75,11 @@ func ensureEnabledPlugins(homeDir string, plugins []string) error {
 
 // PluginConfig configures EnsurePlugins.
 type PluginConfig struct {
-	CLIPath        string   // path to the claude CLI (e.g. "claude")
-	HomeDir        string   // HOME for the CLI; also where plugin state lives (/data)
-	MarketplaceDir string   // image-baked local marketplace catalog (/opt/bot/marketplace)
-	Plugins        []string // "<plugin>@<marketplace>" keys to install + enable
-	Logger         *slog.Logger
+	CLIPath           string   // path to the claude CLI (e.g. "claude")
+	HomeDir           string   // HOME for the CLI; also where plugin state lives (/data)
+	MarketplaceSource string   // source for `claude plugin marketplace add` (e.g. "anthropics/claude-plugins-official")
+	Plugins           []string // "<plugin>@<marketplace>" keys to install + enable
+	Logger            *slog.Logger
 }
 
 // commandRunner runs an external command with HOME=home and returns combined
@@ -93,10 +93,10 @@ func execRunner(ctx context.Context, home, name string, args ...string) ([]byte,
 	return cmd.CombinedOutput()
 }
 
-// EnsurePlugins registers the baked marketplace and installs + enables each
-// configured plugin onto $HOME. Idempotent: already-installed plugins are
-// skipped. All failures are logged and non-fatal — the bot must start even if
-// plugin provisioning fails.
+// EnsurePlugins registers the configured marketplace source and installs +
+// enables each configured plugin onto $HOME. Idempotent: already-installed
+// plugins are skipped. All failures are logged and non-fatal — the bot must
+// start even if plugin provisioning fails.
 func EnsurePlugins(cfg PluginConfig) error {
 	return ensurePlugins(cfg, execRunner)
 }
@@ -110,11 +110,11 @@ func ensurePlugins(cfg PluginConfig, run commandRunner) error {
 		logger = slog.Default()
 	}
 
-	// 1. Register the baked local marketplace so installs resolve offline.
+	// 1. Register the marketplace from its source so installs can resolve.
 	//    Best-effort: a prior boot may already have registered it.
 	mctx, mcancel := context.WithTimeout(context.Background(), 60*time.Second)
-	if out, err := run(mctx, cfg.HomeDir, cfg.CLIPath, "plugin", "marketplace", "add", cfg.MarketplaceDir); err != nil {
-		logger.Warn("plugin marketplace add failed", "dir", cfg.MarketplaceDir, "err", err, "output", string(out))
+	if out, err := run(mctx, cfg.HomeDir, cfg.CLIPath, "plugin", "marketplace", "add", cfg.MarketplaceSource); err != nil {
+		logger.Warn("plugin marketplace add failed", "source", cfg.MarketplaceSource, "err", err, "output", string(out))
 	}
 	mcancel()
 

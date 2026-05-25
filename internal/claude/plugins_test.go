@@ -158,9 +158,9 @@ func (r *recordingRunner) run(ctx context.Context, home, name string, args ...st
 
 func baseConfig(home string) PluginConfig {
 	return PluginConfig{
-		CLIPath:        "claude",
-		HomeDir:        home,
-		MarketplaceDir: "/opt/bot/marketplace",
+		CLIPath:           "claude",
+		HomeDir:           home,
+		MarketplaceSource: "anthropics/claude-plugins-official",
 		Plugins: []string{
 			"superpowers@claude-plugins-official",
 			"skill-creator@claude-plugins-official",
@@ -186,11 +186,11 @@ func TestEnsurePlugins_FreshInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Marketplace registered with the baked local path.
+	// Marketplace registered from its configured source.
 	if len(rr.calls) == 0 ||
 		rr.calls[0][0] != "plugin" || rr.calls[0][1] != "marketplace" ||
-		rr.calls[0][2] != "add" || rr.calls[0][3] != "/opt/bot/marketplace" {
-		t.Fatalf("first call = %v, want plugin marketplace add /opt/bot/marketplace", rr.calls[0])
+		rr.calls[0][2] != "add" || rr.calls[0][3] != "anthropics/claude-plugins-official" {
+		t.Fatalf("first call = %v, want plugin marketplace add anthropics/claude-plugins-official", rr.calls[0])
 	}
 	// Both plugins installed.
 	got := installCalls(rr.calls)

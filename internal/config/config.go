@@ -8,7 +8,7 @@ import (
 
 type Config struct {
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN,required,notEmpty"`
-	AllowedUserID   int64  `env:"ALLOWED_USER_ID,required,notEmpty"`
+	AllowedUserID    int64  `env:"ALLOWED_USER_ID,required,notEmpty"`
 	// Optional when signing in with a Pro/Max subscription via `claude login`
 	// (OAuth credentials stored in $HOME/.claude). When set, Claude Code
 	// prefers the API key over OAuth — so leave it unset to use a subscription.
@@ -34,13 +34,14 @@ type Config struct {
 	// "<plugin>@<marketplace>" key. It is the single source of truth: the
 	// startup step installs each one and writes it into enabledPlugins in
 	// $HOME/.claude/settings.json. Override to add/remove without rebuilding
-	// the image (the marketplace catalog already ships the full set).
+	// the image — just restart.
 	EnabledPlugins []string `env:"ENABLE_PLUGINS" envSeparator:"," envDefault:"superpowers@claude-plugins-official,skill-creator@claude-plugins-official,code-simplifier@claude-plugins-official"`
 
-	// PluginMarketplaceDir is the image-baked, non-volume path holding the
-	// claude-plugins-official marketplace catalog (see Dockerfile). The
-	// startup step registers this local path so installs run offline.
-	PluginMarketplaceDir string `env:"PLUGIN_MARKETPLACE_DIR" envDefault:"/opt/bot/marketplace"`
+	// PluginMarketplaceSource is the source passed to `claude plugin
+	// marketplace add` at startup. The official marketplace name is reserved
+	// and only accepts the anthropics GitHub source, so this fetches over the
+	// network on first boot (idempotent afterwards).
+	PluginMarketplaceSource string `env:"PLUGIN_MARKETPLACE_SOURCE" envDefault:"anthropics/claude-plugins-official"`
 
 	// ExamplesDir points at a read-only `.claude` tree baked into the
 	// container image (agents/, commands/, jobs/). On startup the bot seeds
