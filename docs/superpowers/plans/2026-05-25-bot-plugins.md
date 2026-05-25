@@ -10,6 +10,13 @@
 
 **Spec:** [docs/superpowers/specs/2026-05-25-bot-plugins-design.md](../specs/2026-05-25-bot-plugins-design.md)
 
+> **Revision during execution (2026-05-25):** Task 6 (Dockerfile bake) was
+> reverted and Tasks 2/4 adjusted. The official marketplace name is reserved by
+> the CLI and only accepts the `anthropics` GitHub source, not a baked local
+> path. The marketplace is therefore added from GitHub at startup (network on
+> first boot only); `MarketplaceDir`/`PluginMarketplaceDir` became
+> `MarketplaceSource`/`PluginMarketplaceSource`. See the spec's Revision note.
+
 ---
 
 ## File Structure

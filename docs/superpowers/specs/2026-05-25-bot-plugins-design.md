@@ -1,7 +1,36 @@
 # Design: Claude Code plugins for the orb bot
 
 Date: 2026-05-25
-Status: Approved (pending implementation plan)
+Status: Implemented (with revision below)
+
+## Revision (2026-05-25, during implementation)
+
+Implementation surfaced a hard CLI constraint that changed the marketplace
+strategy: **the official marketplace name `claude-plugins-official` is reserved
+and the CLI only accepts it from the `anthropics` GitHub source — not from a
+baked local path.** Verified directly: `claude plugin marketplace add
+/opt/bot/marketplace` fails with "The name 'claude-plugins-official' is reserved
+… can only be used with GitHub sources from the 'anthropics' organization."
+
+So the "build bakes the marketplace catalog, startup registers it locally"
+mechanism (Component 1 below) is **not viable**. The implemented design instead:
+
+- **No Dockerfile change.** Nothing is baked.
+- **Startup** (`EnsurePlugins`) runs `claude plugin marketplace add
+  anthropics/claude-plugins-official` (GitHub source) then `claude plugin
+  install <p> --scope user` for each plugin. Verified end-to-end in the image
+  with **no credentials**: marketplace add clones successfully, install
+  succeeds, and install auto-writes both `extraKnownMarketplaces` and
+  `enabledPlugins` into `$HOME/.claude/settings.json`.
+- Needs **network on first boot only** (idempotent afterwards). Acceptable: the
+  bot already requires GitHub/network to clone repos.
+- Config field renamed `PluginMarketplaceDir` → `PluginMarketplaceSource`
+  (env `PLUGIN_MARKETPLACE_SOURCE`, default `anthropics/claude-plugins-official`).
+
+The component descriptions below are retained for history; where they describe
+build-time baking or local-path registration, the revision above supersedes
+them. Components 2 (startup install/enable), 3 (runner unchanged), and 4 (config,
+now a source string) hold as implemented.
 
 ## Problem
 
