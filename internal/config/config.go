@@ -29,6 +29,19 @@ type Config struct {
 	ApprovalSocket     string `env:"APPROVAL_SOCKET"                envDefault:"/tmp/orb-approval.sock"`
 	ApprovalHookBin    string `env:"APPROVAL_HOOK_BIN"              envDefault:"/usr/local/bin/orb-approvalhook"`
 
+	// EnabledPlugins is the set of Claude Code plugins the bot installs and
+	// enables for spawned subprocesses on startup. Each entry is a
+	// "<plugin>@<marketplace>" key. It is the single source of truth: the
+	// startup step installs each one and writes it into enabledPlugins in
+	// $HOME/.claude/settings.json. Override to add/remove without rebuilding
+	// the image (the marketplace catalog already ships the full set).
+	EnabledPlugins []string `env:"ENABLE_PLUGINS" envSeparator:"," envDefault:"superpowers@claude-plugins-official,skill-creator@claude-plugins-official,code-simplifier@claude-plugins-official"`
+
+	// PluginMarketplaceDir is the image-baked, non-volume path holding the
+	// claude-plugins-official marketplace catalog (see Dockerfile). The
+	// startup step registers this local path so installs run offline.
+	PluginMarketplaceDir string `env:"PLUGIN_MARKETPLACE_DIR" envDefault:"/opt/bot/marketplace"`
+
 	// ExamplesDir points at a read-only `.claude` tree baked into the
 	// container image (agents/, commands/, jobs/). On startup the bot seeds
 	// any empty subdir under $HOME_DIR/.claude/ from here so a fresh volume
