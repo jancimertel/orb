@@ -1,7 +1,9 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -128,5 +130,142 @@ func TestEnsureEnabledPlugins_Empty(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); !os.IsNotExist(err) {
 		t.Errorf("expected no settings.json to be written")
+	}
+}
+
+// recordingRunner captures every command invocation and can be told to fail
+// specific install/marketplace calls.
+type recordingRunner struct {
+	calls           [][]string
+	failMarketplace bool
+	failInstall     map[string]bool
+}
+
+func (r *recordingRunner) run(ctx context.Context, home, name string, args ...string) ([]byte, error) {
+	r.calls = append(r.calls, args)
+	if len(args) >= 2 && args[0] == "plugin" && args[1] == "marketplace" {
+		if r.failMarketplace {
+			return []byte("marketplace boom"), fmt.Errorf("marketplace add failed")
+		}
+	}
+	if len(args) >= 3 && args[0] == "plugin" && args[1] == "install" {
+		if r.failInstall[args[2]] {
+			return []byte("install boom"), fmt.Errorf("install failed")
+		}
+	}
+	return nil, nil
+}
+
+func baseConfig(home string) PluginConfig {
+	return PluginConfig{
+		CLIPath:        "claude",
+		HomeDir:        home,
+		MarketplaceDir: "/opt/bot/marketplace",
+		Plugins: []string{
+			"superpowers@claude-plugins-official",
+			"skill-creator@claude-plugins-official",
+		},
+	}
+}
+
+func installCalls(calls [][]string) []string {
+	var out []string
+	for _, c := range calls {
+		if len(c) >= 3 && c[0] == "plugin" && c[1] == "install" {
+			out = append(out, c[2])
+		}
+	}
+	return out
+}
+
+func TestEnsurePlugins_FreshInstall(t *testing.T) {
+	home := t.TempDir()
+	rr := &recordingRunner{}
+
+	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+		t.Fatal(err)
+	}
+
+	// Marketplace registered with the baked local path.
+	if len(rr.calls) == 0 ||
+		rr.calls[0][0] != "plugin" || rr.calls[0][1] != "marketplace" ||
+		rr.calls[0][2] != "add" || rr.calls[0][3] != "/opt/bot/marketplace" {
+		t.Fatalf("first call = %v, want plugin marketplace add /opt/bot/marketplace", rr.calls[0])
+	}
+	// Both plugins installed.
+	got := installCalls(rr.calls)
+	if len(got) != 2 {
+		t.Fatalf("install calls = %v, want 2", got)
+	}
+	// Both enabled in settings.json.
+	enabled, _ := readSettings(t, home)["enabledPlugins"].(map[string]any)
+	if enabled["superpowers@claude-plugins-official"] != true ||
+		enabled["skill-creator@claude-plugins-official"] != true {
+		t.Errorf("enabledPlugins = %v, want both true", enabled)
+	}
+}
+
+func TestEnsurePlugins_SkipsInstalled(t *testing.T) {
+	home := t.TempDir()
+	writeInstalledPlugins(t, home, "superpowers@claude-plugins-official")
+	rr := &recordingRunner{}
+
+	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+		t.Fatal(err)
+	}
+
+	got := installCalls(rr.calls)
+	if len(got) != 1 || got[0] != "skill-creator@claude-plugins-official" {
+		t.Fatalf("install calls = %v, want only skill-creator", got)
+	}
+	// Already-installed plugin is still enabled.
+	enabled, _ := readSettings(t, home)["enabledPlugins"].(map[string]any)
+	if enabled["superpowers@claude-plugins-official"] != true {
+		t.Errorf("already-installed plugin not enabled: %v", enabled)
+	}
+}
+
+func TestEnsurePlugins_InstallFailureIsNonFatal(t *testing.T) {
+	home := t.TempDir()
+	rr := &recordingRunner{failInstall: map[string]bool{"superpowers@claude-plugins-official": true}}
+
+	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+		t.Fatalf("install failure must be non-fatal, got %v", err)
+	}
+
+	// The failed plugin is NOT enabled; the succeeding one IS.
+	enabled, _ := readSettings(t, home)["enabledPlugins"].(map[string]any)
+	if enabled["superpowers@claude-plugins-official"] == true {
+		t.Errorf("failed plugin should not be enabled: %v", enabled)
+	}
+	if enabled["skill-creator@claude-plugins-official"] != true {
+		t.Errorf("succeeding plugin should be enabled: %v", enabled)
+	}
+}
+
+func TestEnsurePlugins_MarketplaceFailureIsNonFatal(t *testing.T) {
+	home := t.TempDir()
+	rr := &recordingRunner{failMarketplace: true}
+
+	if err := ensurePlugins(baseConfig(home), rr.run); err != nil {
+		t.Fatalf("marketplace failure must be non-fatal, got %v", err)
+	}
+	// Installs are still attempted despite the marketplace add failing.
+	if len(installCalls(rr.calls)) != 2 {
+		t.Errorf("expected installs attempted after marketplace failure: %v", rr.calls)
+	}
+}
+
+func TestEnsurePlugins_NoPlugins(t *testing.T) {
+	home := t.TempDir()
+	rr := &recordingRunner{}
+	cfg := baseConfig(home)
+	cfg.Plugins = nil
+
+	if err := ensurePlugins(cfg, rr.run); err != nil {
+		t.Fatal(err)
+	}
+	if len(rr.calls) != 0 {
+		t.Errorf("no plugins → no commands, got %v", rr.calls)
 	}
 }

@@ -1,10 +1,14 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 // pluginInstalled reports whether pluginKey ("<plugin>@<marketplace>") appears
@@ -67,4 +71,79 @@ func ensureEnabledPlugins(homeDir string, plugins []string) error {
 		return err
 	}
 	return os.WriteFile(path, append(out, '\n'), 0o644)
+}
+
+// PluginConfig configures EnsurePlugins.
+type PluginConfig struct {
+	CLIPath        string   // path to the claude CLI (e.g. "claude")
+	HomeDir        string   // HOME for the CLI; also where plugin state lives (/data)
+	MarketplaceDir string   // image-baked local marketplace catalog (/opt/bot/marketplace)
+	Plugins        []string // "<plugin>@<marketplace>" keys to install + enable
+	Logger         *slog.Logger
+}
+
+// commandRunner runs an external command with HOME=home and returns combined
+// output. Swapped out in tests.
+type commandRunner func(ctx context.Context, home, name string, args ...string) ([]byte, error)
+
+// execRunner is the production commandRunner: it runs the binary with HOME set.
+func execRunner(ctx context.Context, home, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = append(os.Environ(), "HOME="+home)
+	return cmd.CombinedOutput()
+}
+
+// EnsurePlugins registers the baked marketplace and installs + enables each
+// configured plugin onto $HOME. Idempotent: already-installed plugins are
+// skipped. All failures are logged and non-fatal — the bot must start even if
+// plugin provisioning fails.
+func EnsurePlugins(cfg PluginConfig) error {
+	return ensurePlugins(cfg, execRunner)
+}
+
+func ensurePlugins(cfg PluginConfig, run commandRunner) error {
+	if len(cfg.Plugins) == 0 {
+		return nil
+	}
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	// 1. Register the baked local marketplace so installs resolve offline.
+	//    Best-effort: a prior boot may already have registered it.
+	mctx, mcancel := context.WithTimeout(context.Background(), 60*time.Second)
+	if out, err := run(mctx, cfg.HomeDir, cfg.CLIPath, "plugin", "marketplace", "add", cfg.MarketplaceDir); err != nil {
+		logger.Warn("plugin marketplace add failed", "dir", cfg.MarketplaceDir, "err", err, "output", string(out))
+	}
+	mcancel()
+
+	// 2. Install each plugin that isn't already present; track what's present.
+	var present []string
+	for _, p := range cfg.Plugins {
+		installed, err := pluginInstalled(cfg.HomeDir, p)
+		if err != nil {
+			logger.Warn("plugin install-state check failed", "plugin", p, "err", err)
+		}
+		if installed {
+			logger.Debug("plugin already installed; skipping", "plugin", p)
+			present = append(present, p)
+			continue
+		}
+		ictx, icancel := context.WithTimeout(context.Background(), 120*time.Second)
+		out, err := run(ictx, cfg.HomeDir, cfg.CLIPath, "plugin", "install", p, "--scope", "user")
+		icancel()
+		if err != nil {
+			logger.Warn("plugin install failed", "plugin", p, "err", err, "output", string(out))
+			continue
+		}
+		logger.Info("plugin installed", "plugin", p)
+		present = append(present, p)
+	}
+
+	// 3. Ensure every present plugin is enabled in settings.json.
+	if err := ensureEnabledPlugins(cfg.HomeDir, present); err != nil {
+		logger.Warn("ensure enabledPlugins failed", "err", err)
+	}
+	return nil
 }
