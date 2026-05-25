@@ -218,10 +218,13 @@ func TestEnsurePlugins_SkipsInstalled(t *testing.T) {
 	if len(got) != 1 || got[0] != "skill-creator@claude-plugins-official" {
 		t.Fatalf("install calls = %v, want only skill-creator", got)
 	}
-	// Already-installed plugin is still enabled.
+	// Both the already-installed and the newly-installed plugin are enabled.
 	enabled, _ := readSettings(t, home)["enabledPlugins"].(map[string]any)
 	if enabled["superpowers@claude-plugins-official"] != true {
 		t.Errorf("already-installed plugin not enabled: %v", enabled)
+	}
+	if enabled["skill-creator@claude-plugins-official"] != true {
+		t.Errorf("newly-installed plugin not enabled: %v", enabled)
 	}
 }
 

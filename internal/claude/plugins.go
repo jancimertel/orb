@@ -123,6 +123,9 @@ func ensurePlugins(cfg PluginConfig, run commandRunner) error {
 	for _, p := range cfg.Plugins {
 		installed, err := pluginInstalled(cfg.HomeDir, p)
 		if err != nil {
+			// Couldn't read install state (e.g. corrupt installed_plugins.json):
+			// fall through and attempt install rather than skip, so an
+			// unreadable state file never silently leaves a plugin missing.
 			logger.Warn("plugin install-state check failed", "plugin", p, "err", err)
 		}
 		if installed {
