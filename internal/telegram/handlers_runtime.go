@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 
+	"github.com/jancimertel/orb/internal/catalog"
 	"github.com/jancimertel/orb/internal/state"
 )
 
@@ -41,6 +43,7 @@ Git (approval-gated)
 Runtime
   /usage            Token + cost totals (today, MTD)
   /model [id]       List models or switch
+  /effort [level]   Reasoning effort: low|medium|high|xhigh|max (blank=default)
   /agent [name]     List or switch chat-sticky agent (system prompt)
   /command [name]   One-shot preamble; /command <n> <text> runs now, /command <n> arms next msg
   /skill            List native skills auto-discovered by Claude (/skill info <n> for body)
@@ -65,9 +68,39 @@ type modelEntry struct {
 	label string
 }
 
+// FallbackModels exposes the curated list as catalog.Model values for use as the
+// provider's offline fallback. availableModels stays the single source of truth.
+func FallbackModels() []catalog.Model {
+	out := make([]catalog.Model, len(availableModels))
+	for i, m := range availableModels {
+		out[i] = catalog.Model{ID: m.id, Label: m.label}
+	}
+	return out
+}
+
 const (
 	modelPrefix    = "model:"
 	modelActionSet = "set"
+)
+
+// Effort levels accepted by the CLI's --effort flag. xhigh falls back to high
+// on older models; max is unconstrained. Empty (not listed) = model default.
+var availableEfforts = []effortEntry{
+	{id: "low", label: "Low"},
+	{id: "medium", label: "Medium"},
+	{id: "high", label: "High"},
+	{id: "xhigh", label: "X-High"},
+	{id: "max", label: "Max"},
+}
+
+type effortEntry struct {
+	id    string
+	label string
+}
+
+const (
+	effortPrefix    = "effort:"
+	effortActionSet = "set"
 )
 
 // registerGeneral wires /start and /help.
@@ -84,6 +117,8 @@ func (r *Router) registerRuntime(h *th.BotHandler) {
 	h.Handle(r.handleStatus, th.CommandEqual("status"))
 	h.Handle(r.handleCancel, th.CommandEqual("cancel"))
 	h.Handle(r.handleModelCallback, th.CallbackDataPrefix(modelPrefix))
+	h.Handle(r.handleEffort, th.CommandEqual("effort"))
+	h.Handle(r.handleEffortCallback, th.CallbackDataPrefix(effortPrefix))
 }
 
 func (r *Router) handleStart(ctx *th.Context, u telego.Update) error {
@@ -187,13 +222,13 @@ func (r *Router) handleModel(ctx *th.Context, u telego.Update) error {
 	active := r.activeModelFor(ctx, chatID)
 
 	var rows [][]telego.InlineKeyboardButton
-	for _, m := range availableModels {
-		label := m.label
-		if m.id == active {
+	for _, m := range r.catalog.Models(ctx) {
+		label := m.Label
+		if m.ID == active {
 			label = "✓ " + label
 		}
 		rows = append(rows, []telego.InlineKeyboardButton{
-			{Text: label + "  (" + m.id + ")", CallbackData: modelPrefix + modelActionSet + ":" + m.id},
+			{Text: label + "  (" + m.ID + ")", CallbackData: modelPrefix + modelActionSet + ":" + m.ID},
 		})
 	}
 
@@ -238,15 +273,19 @@ func (r *Router) setModel(ctx *th.Context, chatID int64, id string) error {
 	if err := r.applyModelChange(ctx, chatID, id); err != nil {
 		return r.reply(ctx, chatID, err.Error())
 	}
-	return r.reply(ctx, chatID, "model set to "+id+"\n(takes effect on next turn)")
+	msg := "model set to " + id + "\n(takes effect on next turn)"
+	if !r.knownModel(ctx, id) {
+		msg = "⚠️ " + id + " isn't in the known list — trying it anyway; " +
+			"it will fail on the next turn if the model doesn't exist.\n\n" + msg
+	}
+	return r.reply(ctx, chatID, msg)
 }
 
-// applyModelChange validates id against the known list, persists it, and
-// tears down the runner so the next spawn picks up the new --model.
+// applyModelChange persists the model and tears down the runner so the next
+// spawn picks up the new --model. It does NOT validate membership; callers
+// decide messaging (button ids always come from the catalog; typed ids may be
+// brand-new and are accepted with a warning).
 func (r *Router) applyModelChange(ctx *th.Context, chatID int64, id string) error {
-	if !knownModel(id) {
-		return fmt.Errorf("unknown model %q", id)
-	}
 	if err := r.store.SetActiveModel(ctx, chatID, id); err != nil {
 		r.logger.Error("set model failed", "chat_id", chatID, "err", err)
 		return fmt.Errorf("persist failed")
@@ -256,13 +295,8 @@ func (r *Router) applyModelChange(ctx *th.Context, chatID int64, id string) erro
 	return nil
 }
 
-func knownModel(id string) bool {
-	for _, m := range availableModels {
-		if m.id == id {
-			return true
-		}
-	}
-	return false
+func (r *Router) knownModel(ctx context.Context, id string) bool {
+	return catalog.Contains(r.catalog.Models(ctx), id)
 }
 
 func (r *Router) activeModelFor(ctx *th.Context, chatID int64) string {
@@ -271,6 +305,116 @@ func (r *Router) activeModelFor(ctx *th.Context, chatID int64) string {
 		return cs.ActiveModel
 	}
 	return r.cfg.DefaultModel
+}
+
+// --- /effort --------------------------------------------------------------
+
+func (r *Router) handleEffort(ctx *th.Context, u telego.Update) error {
+	if u.Message == nil {
+		return nil
+	}
+	chatID := u.Message.Chat.ID
+	arg := strings.TrimSpace(argAfterCommand(u.Message.Text))
+
+	if arg != "" {
+		return r.setEffort(ctx, chatID, arg)
+	}
+
+	active := r.activeEffortFor(ctx, chatID)
+
+	var rows [][]telego.InlineKeyboardButton
+	for _, e := range availableEfforts {
+		label := e.label
+		if e.id == active {
+			label = "✓ " + label
+		}
+		rows = append(rows, []telego.InlineKeyboardButton{
+			{Text: label, CallbackData: effortPrefix + effortActionSet + ":" + e.id},
+		})
+	}
+
+	_, err := r.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID:      telego.ChatID{ID: chatID},
+		Text:        "Current effort: " + effortDisplay(active) + "\n\nSelect:",
+		ReplyMarkup: &telego.InlineKeyboardMarkup{InlineKeyboard: rows},
+	})
+	return err
+}
+
+func (r *Router) handleEffortCallback(ctx *th.Context, u telego.Update) error {
+	cq := u.CallbackQuery
+	if cq == nil {
+		return nil
+	}
+	if !strings.HasPrefix(cq.Data, effortPrefix) {
+		return nil
+	}
+	rest := cq.Data[len(effortPrefix):]
+	action, id, ok := strings.Cut(rest, ":")
+	if !ok || action != effortActionSet {
+		return r.answerCallback(ctx, cq.ID, "malformed")
+	}
+	chatID := callbackChatID(cq)
+
+	if err := r.applyEffortChange(ctx, chatID, id); err != nil {
+		return r.answerCallback(ctx, cq.ID, err.Error())
+	}
+	_ = r.answerCallback(ctx, cq.ID, "set")
+	if cq.Message != nil {
+		_, _ = r.bot.EditMessageText(ctx, &telego.EditMessageTextParams{
+			ChatID:    telego.ChatID{ID: chatID},
+			MessageID: cq.Message.GetMessageID(),
+			Text:      "Effort set to " + id + "\n(takes effect on next turn)",
+		})
+	}
+	return nil
+}
+
+func (r *Router) setEffort(ctx *th.Context, chatID int64, id string) error {
+	if err := r.applyEffortChange(ctx, chatID, id); err != nil {
+		return r.reply(ctx, chatID, err.Error())
+	}
+	return r.reply(ctx, chatID, "effort set to "+id+"\n(takes effect on next turn)")
+}
+
+// applyEffortChange validates id against the known levels, persists it, and
+// tears down the runner so the next spawn picks up the new --effort.
+func (r *Router) applyEffortChange(ctx *th.Context, chatID int64, id string) error {
+	if !knownEffort(id) {
+		return fmt.Errorf("unknown effort %q", id)
+	}
+	if err := r.store.SetActiveEffort(ctx, chatID, id); err != nil {
+		r.logger.Error("set effort failed", "chat_id", chatID, "err", err)
+		return fmt.Errorf("persist failed")
+	}
+	r.registry.Reset(chatID)
+	r.sessionAllow.Clear(chatID)
+	return nil
+}
+
+func knownEffort(id string) bool {
+	for _, e := range availableEfforts {
+		if e.id == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Router) activeEffortFor(ctx *th.Context, chatID int64) string {
+	cs, err := r.chatStateOrEmpty(ctx, chatID)
+	if err == nil {
+		return cs.ActiveEffort
+	}
+	return ""
+}
+
+// effortDisplay renders an empty effort as the model-default sentinel.
+func effortDisplay(effort string) string {
+	if effort == "" {
+		return "model default"
+	}
+	return effort
 }
 
 // --- /status --------------------------------------------------------------
@@ -305,6 +449,7 @@ func (r *Router) handleStatus(ctx *th.Context, u telego.Update) error {
 	}
 
 	fmt.Fprintf(&sb, "model:    %s\n", r.activeModelFor(ctx, chatID))
+	fmt.Fprintf(&sb, "effort:   %s\n", effortDisplay(r.activeEffortFor(ctx, chatID)))
 	fmt.Fprintf(&sb, "runner:   %s\n", runnerState(r, chatID))
 
 	if e, ok := r.status.LastError(chatID); ok {
@@ -359,4 +504,3 @@ func humanDuration(d time.Duration) string {
 		return fmt.Sprintf("%ds", s)
 	}
 }
-

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/jancimertel/orb/internal/agent"
 	"github.com/jancimertel/orb/internal/approval"
 	"github.com/jancimertel/orb/internal/auth"
+	"github.com/jancimertel/orb/internal/catalog"
 	"github.com/jancimertel/orb/internal/claude"
 	"github.com/jancimertel/orb/internal/config"
 	"github.com/jancimertel/orb/internal/repo"
@@ -160,7 +162,14 @@ func run() error {
 		logger.Warn("ensure plugins failed", "err", err)
 	}
 
-	router := telegram.NewRouter(bot, store, registry, usageTracker, sessionLister, repoManager, agentLoader, cfg, logger)
+	modelCatalog := catalog.New(
+		cfg.ModelsAPIKey,
+		&http.Client{Timeout: 10 * time.Second},
+		telegram.FallbackModels(),
+		time.Hour,
+		logger,
+	)
+	router := telegram.NewRouter(bot, store, registry, modelCatalog, usageTracker, sessionLister, repoManager, agentLoader, cfg, logger)
 	router.Register(handler)
 
 	cmdsCtx, cmdsCancel := context.WithTimeout(ctx, 10*time.Second)

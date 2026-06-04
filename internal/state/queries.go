@@ -32,19 +32,21 @@ type ChatState struct {
 	ActiveSessionID  string
 	ActiveModel      string
 	ActiveAgent      string
+	ActiveEffort     string
 	UpdatedAt        time.Time
 }
 
 func (s *Store) GetChatState(ctx context.Context, chatID int64) (*ChatState, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT chat_id, COALESCE(active_repo_alias, ''), COALESCE(active_session_id, ''),
-		       COALESCE(active_model, ''), COALESCE(active_agent, ''), COALESCE(updated_at, '')
+		       COALESCE(active_model, ''), COALESCE(active_agent, ''),
+		       COALESCE(active_effort, ''), COALESCE(updated_at, '')
 		FROM chat_state WHERE chat_id = ?`, chatID)
 	var (
 		cs        ChatState
 		updatedAt string
 	)
-	if err := row.Scan(&cs.ChatID, &cs.ActiveRepoAlias, &cs.ActiveSessionID, &cs.ActiveModel, &cs.ActiveAgent, &updatedAt); err != nil {
+	if err := row.Scan(&cs.ChatID, &cs.ActiveRepoAlias, &cs.ActiveSessionID, &cs.ActiveModel, &cs.ActiveAgent, &cs.ActiveEffort, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -72,6 +74,10 @@ func (s *Store) SetActiveModel(ctx context.Context, chatID int64, model string) 
 
 func (s *Store) SetActiveAgent(ctx context.Context, chatID int64, name string) error {
 	return s.upsertChatState(ctx, chatID, "active_agent", name)
+}
+
+func (s *Store) SetActiveEffort(ctx context.Context, chatID int64, effort string) error {
+	return s.upsertChatState(ctx, chatID, "active_effort", effort)
 }
 
 // upsertChatState writes a single mutable column on chat_state, inserting the

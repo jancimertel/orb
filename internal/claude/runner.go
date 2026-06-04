@@ -21,6 +21,7 @@ type SpawnOpts struct {
 	HomeDir   string // HOME env for the subprocess (e.g. /data)
 	APIKey    string // ANTHROPIC_API_KEY
 	Model     string // optional; maps to --model
+	Effort    string // optional; maps to --effort (low|medium|high|xhigh|max). Empty omits the flag.
 	SessionID string // optional; maps to --resume
 
 	// HookBinary is the absolute path to the approvalhook binary invoked
@@ -76,28 +77,9 @@ func Spawn(opts SpawnOpts) (*Runner, error) {
 		cli = "claude"
 	}
 
-	args := []string{
-		"--print",
-		"--output-format", "stream-json",
-		"--input-format", "stream-json",
-		"--verbose",
-		"--permission-mode", "acceptEdits",
-	}
-	if opts.HookBinary != "" {
-		settings, err := buildHookSettings(opts.HookBinary)
-		if err != nil {
-			return nil, err
-		}
-		args = append(args, "--settings", settings)
-	}
-	if opts.SessionID != "" {
-		args = append(args, "--resume", opts.SessionID)
-	}
-	if opts.Model != "" {
-		args = append(args, "--model", opts.Model)
-	}
-	if opts.SystemPromptAppend != "" {
-		args = append(args, "--append-system-prompt", opts.SystemPromptAppend)
+	args, err := buildArgs(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	cmd := exec.Command(cli, args...)
@@ -131,6 +113,38 @@ func Spawn(opts SpawnOpts) (*Runner, error) {
 	go r.waitLoop()
 
 	return r, nil
+}
+
+// buildArgs assembles the CLI argument list for a spawn. Pure and
+// side-effect-free so the flag wiring can be unit-tested without exec.
+func buildArgs(opts SpawnOpts) ([]string, error) {
+	args := []string{
+		"--print",
+		"--output-format", "stream-json",
+		"--input-format", "stream-json",
+		"--verbose",
+		"--permission-mode", "acceptEdits",
+	}
+	if opts.HookBinary != "" {
+		settings, err := buildHookSettings(opts.HookBinary)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, "--settings", settings)
+	}
+	if opts.SessionID != "" {
+		args = append(args, "--resume", opts.SessionID)
+	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
+	}
+	if opts.SystemPromptAppend != "" {
+		args = append(args, "--append-system-prompt", opts.SystemPromptAppend)
+	}
+	return args, nil
 }
 
 func buildEnv(opts SpawnOpts) []string {

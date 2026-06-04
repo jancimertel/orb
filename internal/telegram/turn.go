@@ -78,6 +78,7 @@ func (r *Router) driveTurn(ctx *th.Context, chatID int64, prompt string) error {
 		"turn_id", turnID,
 		"session_id", cs.ActiveSessionID,
 		"model", model,
+		"effort", cs.ActiveEffort,
 		"agent", cs.ActiveAgent,
 		"agent_body_chars", len(agentBody),
 		"agent_preamble_applied", preambleApplied,
@@ -88,6 +89,7 @@ func (r *Router) driveTurn(ctx *th.Context, chatID int64, prompt string) error {
 	turn, err := r.registry.StartTurn(chatID, claude.TurnOpts{
 		CWD:                cwd,
 		Model:              model,
+		Effort:             cs.ActiveEffort,
 		SessionID:          cs.ActiveSessionID,
 		SystemPromptAppend: agentBody,
 	})

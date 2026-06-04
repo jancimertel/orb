@@ -9,6 +9,7 @@ import (
 	th "github.com/mymmrac/telego/telegohandler"
 
 	"github.com/jancimertel/orb/internal/agent"
+	"github.com/jancimertel/orb/internal/catalog"
 	"github.com/jancimertel/orb/internal/claude"
 	"github.com/jancimertel/orb/internal/config"
 	"github.com/jancimertel/orb/internal/repo"
@@ -20,15 +21,16 @@ import (
 // Router wires Telegram commands and text messages to handlers. It is
 // constructed once at startup and registered on the telego bot handler.
 type Router struct {
-	bot         *telego.Bot
-	store       *state.Store
-	registry    *claude.Registry
-	usage       *usage.Tracker
-	sessions    *session.Lister
-	repos       *repo.Manager
-	agents      *agent.Loader
-	cfg         *config.Config
-	logger      *slog.Logger
+	bot             *telego.Bot
+	store           *state.Store
+	registry        *claude.Registry
+	catalog         *catalog.Provider
+	usage           *usage.Tracker
+	sessions        *session.Lister
+	repos           *repo.Manager
+	agents          *agent.Loader
+	cfg             *config.Config
+	logger          *slog.Logger
 	approvals       *approvalStore
 	gitConfirms     *gitConfirmStore
 	status          *statusTracker
@@ -41,6 +43,7 @@ func NewRouter(
 	bot *telego.Bot,
 	store *state.Store,
 	registry *claude.Registry,
+	modelCatalog *catalog.Provider,
 	usageTracker *usage.Tracker,
 	sessions *session.Lister,
 	repos *repo.Manager,
@@ -49,15 +52,16 @@ func NewRouter(
 	logger *slog.Logger,
 ) *Router {
 	return &Router{
-		bot:         bot,
-		store:       store,
-		registry:    registry,
-		usage:       usageTracker,
-		sessions:    sessions,
-		repos:       repos,
-		agents:      agents,
-		cfg:         cfg,
-		logger:      logger,
+		bot:             bot,
+		store:           store,
+		registry:        registry,
+		catalog:         modelCatalog,
+		usage:           usageTracker,
+		sessions:        sessions,
+		repos:           repos,
+		agents:          agents,
+		cfg:             cfg,
+		logger:          logger,
 		approvals:       newApprovalStore(),
 		gitConfirms:     newGitConfirmStore(60 * time.Second),
 		status:          newStatusTracker(),
