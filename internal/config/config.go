@@ -13,9 +13,14 @@ type Config struct {
 	// (OAuth credentials stored in $HOME/.claude). When set, Claude Code
 	// prefers the API key over OAuth — so leave it unset to use a subscription.
 	AnthropicAPIKey string `env:"ANTHROPIC_API_KEY"`
-	GithubPAT       string `env:"GITHUB_PAT,required,notEmpty"`
-	GitUserName     string `env:"GIT_USER_NAME,required,notEmpty"`
-	GitUserEmail    string `env:"GIT_USER_EMAIL,required,notEmpty"`
+	// ModelsAPIKey is a READ-ONLY Anthropic console API key used ONLY to list
+	// models via GET /v1/models. It is never injected into spawned CLI
+	// subprocesses, so model runs stay on the subscription. Empty = use the
+	// curated fallback list and make no network calls.
+	ModelsAPIKey string `env:"MODELS_API_KEY"`
+	GithubPAT    string `env:"GITHUB_PAT,required,notEmpty"`
+	GitUserName  string `env:"GIT_USER_NAME,required,notEmpty"`
+	GitUserEmail string `env:"GIT_USER_EMAIL,required,notEmpty"`
 
 	DefaultModel       string `env:"DEFAULT_MODEL"                  envDefault:"claude-sonnet-4-6"`
 	LogLevel           string `env:"LOG_LEVEL"                      envDefault:"info"`
