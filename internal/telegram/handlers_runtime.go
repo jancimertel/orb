@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -221,13 +222,13 @@ func (r *Router) handleModel(ctx *th.Context, u telego.Update) error {
 	active := r.activeModelFor(ctx, chatID)
 
 	var rows [][]telego.InlineKeyboardButton
-	for _, m := range availableModels {
-		label := m.label
-		if m.id == active {
+	for _, m := range r.catalog.Models(ctx) {
+		label := m.Label
+		if m.ID == active {
 			label = "✓ " + label
 		}
 		rows = append(rows, []telego.InlineKeyboardButton{
-			{Text: label + "  (" + m.id + ")", CallbackData: modelPrefix + modelActionSet + ":" + m.id},
+			{Text: label + "  (" + m.ID + ")", CallbackData: modelPrefix + modelActionSet + ":" + m.ID},
 		})
 	}
 
@@ -272,15 +273,19 @@ func (r *Router) setModel(ctx *th.Context, chatID int64, id string) error {
 	if err := r.applyModelChange(ctx, chatID, id); err != nil {
 		return r.reply(ctx, chatID, err.Error())
 	}
-	return r.reply(ctx, chatID, "model set to "+id+"\n(takes effect on next turn)")
+	msg := "model set to " + id + "\n(takes effect on next turn)"
+	if !r.knownModel(ctx, id) {
+		msg = "⚠️ " + id + " isn't in the known list — trying it anyway; " +
+			"it will fail on the next turn if the model doesn't exist.\n\n" + msg
+	}
+	return r.reply(ctx, chatID, msg)
 }
 
-// applyModelChange validates id against the known list, persists it, and
-// tears down the runner so the next spawn picks up the new --model.
+// applyModelChange persists the model and tears down the runner so the next
+// spawn picks up the new --model. It does NOT validate membership; callers
+// decide messaging (button ids always come from the catalog; typed ids may be
+// brand-new and are accepted with a warning).
 func (r *Router) applyModelChange(ctx *th.Context, chatID int64, id string) error {
-	if !knownModel(id) {
-		return fmt.Errorf("unknown model %q", id)
-	}
 	if err := r.store.SetActiveModel(ctx, chatID, id); err != nil {
 		r.logger.Error("set model failed", "chat_id", chatID, "err", err)
 		return fmt.Errorf("persist failed")
@@ -290,13 +295,8 @@ func (r *Router) applyModelChange(ctx *th.Context, chatID int64, id string) erro
 	return nil
 }
 
-func knownModel(id string) bool {
-	for _, m := range availableModels {
-		if m.id == id {
-			return true
-		}
-	}
-	return false
+func (r *Router) knownModel(ctx context.Context, id string) bool {
+	return catalog.Contains(r.catalog.Models(ctx), id)
 }
 
 func (r *Router) activeModelFor(ctx *th.Context, chatID int64) string {
