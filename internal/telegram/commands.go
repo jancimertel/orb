@@ -19,6 +19,7 @@ var botCommands = []telego.BotCommand{
 	{Command: "new", Description: "start a fresh Claude session"},
 	{Command: "session", Description: "browse / resume past sessions"},
 	{Command: "model", Description: "list or switch Claude model"},
+	{Command: "effort", Description: "set reasoning effort: low|medium|high|xhigh|max"},
 	{Command: "agent", Description: "list or switch chat-sticky agent (system prompt)"},
 	{Command: "command", Description: "one-shot preamble from .claude/commands/"},
 	{Command: "skill", Description: "list native Claude skills from .claude/skills/"},
