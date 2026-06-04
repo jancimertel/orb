@@ -46,3 +46,18 @@ After adding or editing files, issue `/agent reload` (or `/command reload`,
 
 See [../SKILLS_PERSONA_JOBS.md](../SKILLS_PERSONA_JOBS.md) for the full
 design and the frontmatter schemas.
+
+## Plugins
+
+On startup the bot installs and enables a set of Claude Code plugins for every
+spawned session, from the official `claude-plugins-official` marketplace.
+Defaults: `superpowers`, `skill-creator`, `code-simplifier`.
+
+The marketplace is added from its GitHub source on first boot (the reserved
+official name only accepts the `anthropics` GitHub source, not a local path),
+so the **first** start needs network; it's idempotent afterwards and plugin
+files persist on the `claude-home` volume under `.claude/plugins`.
+
+Override the set with the `ENABLE_PLUGINS` env var (comma-separated
+`<plugin>@<marketplace>` keys) and the source with `PLUGIN_MARKETPLACE_SOURCE`;
+no rebuild is needed to change which plugins are active — just restart.
