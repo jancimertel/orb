@@ -47,6 +47,7 @@ Runtime
   /agent [name]     List or switch chat-sticky agent (system prompt)
   /command [name]   One-shot preamble; /command <n> <text> runs now, /command <n> arms next msg
   /skill            List native skills auto-discovered by Claude (/skill info <n> for body)
+  /plugins          List installed Claude Code plugins (provisioned at startup)
   /remember <text>  Append to memory (auto-scope: project if repo active, else user)
   /memory           Summary; /memory show [scope], /memory clear <scope>, /memory path
   /context          Show what gets injected into the next turn (agent body, paths)

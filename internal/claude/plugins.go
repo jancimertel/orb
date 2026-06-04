@@ -8,8 +8,71 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"time"
 )
+
+// PluginStatus describes one installed plugin for operator-facing listings.
+type PluginStatus struct {
+	Key     string // "<plugin>@<marketplace>"
+	Version string // reported install version ("" or "unknown" when unset)
+	Scope   string // install scope, e.g. "user"
+	Enabled bool   // whether enabledPlugins in settings.json has it true
+}
+
+// ListPlugins reads the plugin state under $HOME/.claude and returns every
+// installed plugin with its enabled flag, sorted by key. A missing
+// installed_plugins.json yields an empty list (not an error) so a fresh volume
+// reads cleanly.
+func ListPlugins(homeDir string) ([]PluginStatus, error) {
+	path := filepath.Join(homeDir, ".claude", "plugins", "installed_plugins.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var doc struct {
+		Plugins map[string][]struct {
+			Scope   string `json:"scope"`
+			Version string `json:"version"`
+		} `json:"plugins"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return nil, fmt.Errorf("parse installed_plugins.json: %w", err)
+	}
+
+	enabled := readEnabledPlugins(homeDir)
+	out := make([]PluginStatus, 0, len(doc.Plugins))
+	for key, installs := range doc.Plugins {
+		ps := PluginStatus{Key: key, Enabled: enabled[key]}
+		if len(installs) > 0 {
+			ps.Version = installs[0].Version
+			ps.Scope = installs[0].Scope
+		}
+		out = append(out, ps)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
+// readEnabledPlugins returns the enabledPlugins map from settings.json, or an
+// empty map when the file is absent or unparseable (best-effort, never errors).
+func readEnabledPlugins(homeDir string) map[string]bool {
+	path := filepath.Join(homeDir, ".claude", "settings.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]bool{}
+	}
+	var doc struct {
+		EnabledPlugins map[string]bool `json:"enabledPlugins"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return map[string]bool{}
+	}
+	return doc.EnabledPlugins
+}
 
 // pluginInstalled reports whether pluginKey ("<plugin>@<marketplace>") appears
 // in $HOME/.claude/plugins/installed_plugins.json. A missing file means "not
