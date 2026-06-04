@@ -41,6 +41,7 @@ Git (approval-gated)
 Runtime
   /usage            Token + cost totals (today, MTD)
   /model [id]       List models or switch
+  /effort [level]   Reasoning effort: low|medium|high|xhigh|max (blank=default)
   /agent [name]     List or switch chat-sticky agent (system prompt)
   /command [name]   One-shot preamble; /command <n> <text> runs now, /command <n> arms next msg
   /skill            List native skills auto-discovered by Claude (/skill info <n> for body)
@@ -70,6 +71,26 @@ const (
 	modelActionSet = "set"
 )
 
+// Effort levels accepted by the CLI's --effort flag. xhigh falls back to high
+// on older models; max is unconstrained. Empty (not listed) = model default.
+var availableEfforts = []effortEntry{
+	{id: "low", label: "Low"},
+	{id: "medium", label: "Medium"},
+	{id: "high", label: "High"},
+	{id: "xhigh", label: "X-High"},
+	{id: "max", label: "Max"},
+}
+
+type effortEntry struct {
+	id    string
+	label string
+}
+
+const (
+	effortPrefix    = "effort:"
+	effortActionSet = "set"
+)
+
 // registerGeneral wires /start and /help.
 func (r *Router) registerGeneral(h *th.BotHandler) {
 	h.Handle(r.handleStart, th.CommandEqual("start"))
@@ -84,6 +105,8 @@ func (r *Router) registerRuntime(h *th.BotHandler) {
 	h.Handle(r.handleStatus, th.CommandEqual("status"))
 	h.Handle(r.handleCancel, th.CommandEqual("cancel"))
 	h.Handle(r.handleModelCallback, th.CallbackDataPrefix(modelPrefix))
+	h.Handle(r.handleEffort, th.CommandEqual("effort"))
+	h.Handle(r.handleEffortCallback, th.CallbackDataPrefix(effortPrefix))
 }
 
 func (r *Router) handleStart(ctx *th.Context, u telego.Update) error {
@@ -273,6 +296,116 @@ func (r *Router) activeModelFor(ctx *th.Context, chatID int64) string {
 	return r.cfg.DefaultModel
 }
 
+// --- /effort --------------------------------------------------------------
+
+func (r *Router) handleEffort(ctx *th.Context, u telego.Update) error {
+	if u.Message == nil {
+		return nil
+	}
+	chatID := u.Message.Chat.ID
+	arg := strings.TrimSpace(argAfterCommand(u.Message.Text))
+
+	if arg != "" {
+		return r.setEffort(ctx, chatID, arg)
+	}
+
+	active := r.activeEffortFor(ctx, chatID)
+
+	var rows [][]telego.InlineKeyboardButton
+	for _, e := range availableEfforts {
+		label := e.label
+		if e.id == active {
+			label = "✓ " + label
+		}
+		rows = append(rows, []telego.InlineKeyboardButton{
+			{Text: label, CallbackData: effortPrefix + effortActionSet + ":" + e.id},
+		})
+	}
+
+	_, err := r.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID:      telego.ChatID{ID: chatID},
+		Text:        "Current effort: " + effortDisplay(active) + "\n\nSelect:",
+		ReplyMarkup: &telego.InlineKeyboardMarkup{InlineKeyboard: rows},
+	})
+	return err
+}
+
+func (r *Router) handleEffortCallback(ctx *th.Context, u telego.Update) error {
+	cq := u.CallbackQuery
+	if cq == nil {
+		return nil
+	}
+	if !strings.HasPrefix(cq.Data, effortPrefix) {
+		return nil
+	}
+	rest := cq.Data[len(effortPrefix):]
+	action, id, ok := strings.Cut(rest, ":")
+	if !ok || action != effortActionSet {
+		return r.answerCallback(ctx, cq.ID, "malformed")
+	}
+	chatID := callbackChatID(cq)
+
+	if err := r.applyEffortChange(ctx, chatID, id); err != nil {
+		return r.answerCallback(ctx, cq.ID, err.Error())
+	}
+	_ = r.answerCallback(ctx, cq.ID, "set")
+	if cq.Message != nil {
+		_, _ = r.bot.EditMessageText(ctx, &telego.EditMessageTextParams{
+			ChatID:    telego.ChatID{ID: chatID},
+			MessageID: cq.Message.GetMessageID(),
+			Text:      "Effort set to " + id + "\n(takes effect on next turn)",
+		})
+	}
+	return nil
+}
+
+func (r *Router) setEffort(ctx *th.Context, chatID int64, id string) error {
+	if err := r.applyEffortChange(ctx, chatID, id); err != nil {
+		return r.reply(ctx, chatID, err.Error())
+	}
+	return r.reply(ctx, chatID, "effort set to "+id+"\n(takes effect on next turn)")
+}
+
+// applyEffortChange validates id against the known levels, persists it, and
+// tears down the runner so the next spawn picks up the new --effort.
+func (r *Router) applyEffortChange(ctx *th.Context, chatID int64, id string) error {
+	if !knownEffort(id) {
+		return fmt.Errorf("unknown effort %q", id)
+	}
+	if err := r.store.SetActiveEffort(ctx, chatID, id); err != nil {
+		r.logger.Error("set effort failed", "chat_id", chatID, "err", err)
+		return fmt.Errorf("persist failed")
+	}
+	r.registry.Reset(chatID)
+	r.sessionAllow.Clear(chatID)
+	return nil
+}
+
+func knownEffort(id string) bool {
+	for _, e := range availableEfforts {
+		if e.id == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Router) activeEffortFor(ctx *th.Context, chatID int64) string {
+	cs, err := r.chatStateOrEmpty(ctx, chatID)
+	if err == nil {
+		return cs.ActiveEffort
+	}
+	return ""
+}
+
+// effortDisplay renders an empty effort as the model-default sentinel.
+func effortDisplay(effort string) string {
+	if effort == "" {
+		return "model default"
+	}
+	return effort
+}
+
 // --- /status --------------------------------------------------------------
 
 func (r *Router) handleStatus(ctx *th.Context, u telego.Update) error {
@@ -305,6 +438,7 @@ func (r *Router) handleStatus(ctx *th.Context, u telego.Update) error {
 	}
 
 	fmt.Fprintf(&sb, "model:    %s\n", r.activeModelFor(ctx, chatID))
+	fmt.Fprintf(&sb, "effort:   %s\n", effortDisplay(r.activeEffortFor(ctx, chatID)))
 	fmt.Fprintf(&sb, "runner:   %s\n", runnerState(r, chatID))
 
 	if e, ok := r.status.LastError(chatID); ok {
