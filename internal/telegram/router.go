@@ -82,6 +82,7 @@ func (r *Router) Register(h *th.BotHandler) {
 	r.registerAgent(h)
 	r.registerCommand(h)
 	r.registerSkill(h)
+	r.registerPlugin(h)
 	r.registerMemory(h)
 	r.registerContext(h)
 	r.registerGit(h)

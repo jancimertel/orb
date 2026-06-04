@@ -34,19 +34,23 @@ type Config struct {
 	ApprovalSocket     string `env:"APPROVAL_SOCKET"                envDefault:"/tmp/orb-approval.sock"`
 	ApprovalHookBin    string `env:"APPROVAL_HOOK_BIN"              envDefault:"/usr/local/bin/orb-approvalhook"`
 
-	// EnabledPlugins is the set of Claude Code plugins the bot installs and
-	// enables for spawned subprocesses on startup. Each entry is a
-	// "<plugin>@<marketplace>" key. It is the single source of truth: the
-	// startup step installs each one and writes it into enabledPlugins in
-	// $HOME/.claude/settings.json. Override to add/remove without rebuilding
-	// the image — just restart.
-	EnabledPlugins []string `env:"ENABLE_PLUGINS" envSeparator:"," envDefault:"superpowers@claude-plugins-official,skill-creator@claude-plugins-official,code-simplifier@claude-plugins-official"`
+	// Plugins is the authoritative set of Claude Code plugins the bot installs
+	// and enables for spawned subprocesses on startup. Each entry is a
+	// "<plugin>@<marketplace>" key. The startup step installs each one and
+	// rewrites enabledPlugins in $HOME/.claude/settings.json to match exactly —
+	// so removing a plugin here and restarting disables it (only the listed
+	// plugins load). Override to add/remove without rebuilding the image — just
+	// restart.
+	Plugins []string `env:"PLUGINS" envSeparator:"," envDefault:"superpowers@claude-plugins-official,skill-creator@claude-plugins-official,code-simplifier@claude-plugins-official"`
 
-	// PluginMarketplaceSource is the source passed to `claude plugin
-	// marketplace add` at startup. The official marketplace name is reserved
-	// and only accepts the anthropics GitHub source, so this fetches over the
-	// network on first boot (idempotent afterwards).
-	PluginMarketplaceSource string `env:"PLUGIN_MARKETPLACE_SOURCE" envDefault:"anthropics/claude-plugins-official"`
+	// PluginMarketplaceSources are the sources passed to `claude plugin
+	// marketplace add` at startup (comma-separated). Each registers a
+	// marketplace that PLUGINS keys can reference via their "@<marketplace>"
+	// suffix. The official marketplace name is reserved and only accepts the
+	// anthropics GitHub source, so the default fetches over the network on first
+	// boot (idempotent afterwards). Add more sources to install plugins from
+	// other marketplaces.
+	PluginMarketplaceSources []string `env:"PLUGIN_MARKETPLACE_SOURCES" envSeparator:"," envDefault:"anthropics/claude-plugins-official"`
 
 	// ExamplesDir points at a read-only `.claude` tree baked into the
 	// container image (agents/, commands/, jobs/). On startup the bot seeds

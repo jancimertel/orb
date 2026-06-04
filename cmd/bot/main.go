@@ -153,11 +153,11 @@ func run() error {
 	// from its GitHub source (the reserved name rejects local paths). Fetches
 	// over the network on first boot only. Non-fatal: the bot starts regardless.
 	if err := claude.EnsurePlugins(ctx, claude.PluginConfig{
-		CLIPath:           cfg.ClaudeCLI,
-		HomeDir:           cfg.HomeDir,
-		MarketplaceSource: cfg.PluginMarketplaceSource,
-		Plugins:           cfg.EnabledPlugins,
-		Logger:            logger,
+		CLIPath:            cfg.ClaudeCLI,
+		HomeDir:            cfg.HomeDir,
+		MarketplaceSources: cfg.PluginMarketplaceSources,
+		Plugins:            cfg.Plugins,
+		Logger:             logger,
 	}); err != nil {
 		logger.Warn("ensure plugins failed", "err", err)
 	}
