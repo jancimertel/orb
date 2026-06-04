@@ -96,15 +96,14 @@ func pluginInstalled(homeDir, pluginKey string) (bool, error) {
 	return ok, nil
 }
 
-// ensureEnabledPlugins idempotently sets enabledPlugins["<key>"]=true for each
-// plugin in $HOME/.claude/settings.json, creating the file if absent and
-// preserving every other key. No-op when plugins is empty. This makes plugin
-// enablement robust regardless of whether `claude plugin install` writes the
-// flag itself.
-func ensureEnabledPlugins(homeDir string, plugins []string) error {
-	if len(plugins) == 0 {
-		return nil
-	}
+// reconcileEnabledPlugins rewrites enabledPlugins in $HOME/.claude/settings.json
+// so it reflects `desired` EXACTLY: every desired plugin is set true, and every
+// other plugin previously listed is set false (disabled). This makes the PLUGINS
+// env var authoritative — dropping a plugin from it and restarting disables it on
+// the next boot, so only the configured plugins load. All other settings keys are
+// preserved. Disabled plugins are written as false (rather than deleted) so the
+// intent is explicit and robust regardless of any default-enable behavior.
+func reconcileEnabledPlugins(homeDir string, desired []string) error {
 	path := filepath.Join(homeDir, ".claude", "settings.json")
 
 	settings := map[string]any{}
@@ -117,11 +116,20 @@ func ensureEnabledPlugins(homeDir string, plugins []string) error {
 		return err
 	}
 
-	enabled, _ := settings["enabledPlugins"].(map[string]any)
-	if enabled == nil {
-		enabled = map[string]any{}
+	desiredSet := make(map[string]bool, len(desired))
+	for _, p := range desired {
+		desiredSet[p] = true
 	}
-	for _, p := range plugins {
+
+	prev, _ := settings["enabledPlugins"].(map[string]any)
+	enabled := make(map[string]any, len(prev)+len(desired))
+	// Flip every previously-listed plugin to its desired membership: anything no
+	// longer wanted becomes false (disabled).
+	for k := range prev {
+		enabled[k] = desiredSet[k]
+	}
+	// Ensure every desired plugin is present and enabled.
+	for _, p := range desired {
 		enabled[p] = true
 	}
 	settings["enabledPlugins"] = enabled
@@ -208,9 +216,10 @@ func ensurePlugins(ctx context.Context, cfg PluginConfig, run commandRunner) err
 		present = append(present, p)
 	}
 
-	// 3. Ensure every present plugin is enabled in settings.json.
-	if err := ensureEnabledPlugins(cfg.HomeDir, present); err != nil {
-		logger.Warn("ensure enabledPlugins failed", "err", err)
+	// 3. Reconcile settings.json so enabledPlugins reflects exactly the
+	//    configured-and-installed set (present); anything else is disabled.
+	if err := reconcileEnabledPlugins(cfg.HomeDir, present); err != nil {
+		logger.Warn("reconcile enabledPlugins failed", "err", err)
 	}
 	return nil
 }

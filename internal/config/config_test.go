@@ -15,7 +15,7 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("GIT_USER_EMAIL", "x")
 }
 
-func TestLoad_EnabledPluginsDefault(t *testing.T) {
+func TestLoad_PluginsDefault(t *testing.T) {
 	setRequiredEnv(t)
 
 	cfg, err := Load()
@@ -28,12 +28,12 @@ func TestLoad_EnabledPluginsDefault(t *testing.T) {
 		"skill-creator@claude-plugins-official",
 		"code-simplifier@claude-plugins-official",
 	}
-	if len(cfg.EnabledPlugins) != len(want) {
-		t.Fatalf("EnabledPlugins = %v, want %v", cfg.EnabledPlugins, want)
+	if len(cfg.Plugins) != len(want) {
+		t.Fatalf("Plugins = %v, want %v", cfg.Plugins, want)
 	}
 	for i, p := range want {
-		if cfg.EnabledPlugins[i] != p {
-			t.Errorf("EnabledPlugins[%d] = %q, want %q", i, cfg.EnabledPlugins[i], p)
+		if cfg.Plugins[i] != p {
+			t.Errorf("Plugins[%d] = %q, want %q", i, cfg.Plugins[i], p)
 		}
 	}
 
@@ -42,9 +42,9 @@ func TestLoad_EnabledPluginsDefault(t *testing.T) {
 	}
 }
 
-func TestLoad_EnabledPluginsOverride(t *testing.T) {
+func TestLoad_PluginsOverride(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("ENABLE_PLUGINS", "superpowers@claude-plugins-official,foo@bar")
+	t.Setenv("PLUGINS", "superpowers@claude-plugins-official,foo@bar")
 
 	cfg, err := Load()
 	if err != nil {
@@ -52,12 +52,12 @@ func TestLoad_EnabledPluginsOverride(t *testing.T) {
 	}
 
 	want := []string{"superpowers@claude-plugins-official", "foo@bar"}
-	if len(cfg.EnabledPlugins) != len(want) {
-		t.Fatalf("EnabledPlugins = %v, want %v", cfg.EnabledPlugins, want)
+	if len(cfg.Plugins) != len(want) {
+		t.Fatalf("Plugins = %v, want %v", cfg.Plugins, want)
 	}
 	for i, p := range want {
-		if cfg.EnabledPlugins[i] != p {
-			t.Errorf("EnabledPlugins[%d] = %q, want %q", i, cfg.EnabledPlugins[i], p)
+		if cfg.Plugins[i] != p {
+			t.Errorf("Plugins[%d] = %q, want %q", i, cfg.Plugins[i], p)
 		}
 	}
 }

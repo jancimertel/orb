@@ -74,13 +74,13 @@ func readSettings(t *testing.T, home string) map[string]any {
 	return m
 }
 
-func TestEnsureEnabledPlugins_CreatesFile(t *testing.T) {
+func TestReconcileEnabledPlugins_CreatesFile(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	err := ensureEnabledPlugins(home, []string{"superpowers@claude-plugins-official"})
+	err := reconcileEnabledPlugins(home, []string{"superpowers@claude-plugins-official"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,19 +92,20 @@ func TestEnsureEnabledPlugins_CreatesFile(t *testing.T) {
 	}
 }
 
-func TestEnsureEnabledPlugins_PreservesExisting(t *testing.T) {
+func TestReconcileEnabledPlugins_DisablesUnwantedPreservesOtherKeys(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, ".claude")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Operator-written settings: a custom key plus one already-enabled plugin.
+	// Existing settings: a custom key plus a previously-enabled plugin that is
+	// NOT in the desired set.
 	existing := `{"model":"opus","enabledPlugins":{"other@mkt":true}}`
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(existing), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	err := ensureEnabledPlugins(home, []string{"superpowers@claude-plugins-official"})
+	err := reconcileEnabledPlugins(home, []string{"superpowers@claude-plugins-official"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,22 +115,34 @@ func TestEnsureEnabledPlugins_PreservesExisting(t *testing.T) {
 		t.Errorf("model key not preserved: %v", m["model"])
 	}
 	enabled, _ := m["enabledPlugins"].(map[string]any)
-	if enabled["other@mkt"] != true {
-		t.Errorf("existing enabled plugin dropped: %v", enabled)
+	// Authoritative: a plugin no longer desired is disabled (false), not kept.
+	if enabled["other@mkt"] != false {
+		t.Errorf("unwanted plugin should be disabled (false), got: %v", enabled["other@mkt"])
 	}
 	if enabled["superpowers@claude-plugins-official"] != true {
-		t.Errorf("new plugin not enabled: %v", enabled)
+		t.Errorf("desired plugin not enabled: %v", enabled)
 	}
 }
 
-func TestEnsureEnabledPlugins_Empty(t *testing.T) {
+func TestReconcileEnabledPlugins_EmptyDisablesAll(t *testing.T) {
 	home := t.TempDir()
-	// No plugins → no file written, no error.
-	if err := ensureEnabledPlugins(home, nil); err != nil {
+	dir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); !os.IsNotExist(err) {
-		t.Errorf("expected no settings.json to be written")
+	existing := `{"enabledPlugins":{"a@mkt":true,"b@mkt":true}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty desired set → every previously-enabled plugin is disabled.
+	if err := reconcileEnabledPlugins(home, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	enabled, _ := readSettings(t, home)["enabledPlugins"].(map[string]any)
+	if enabled["a@mkt"] != false || enabled["b@mkt"] != false {
+		t.Errorf("expected all disabled, got: %v", enabled)
 	}
 }
 
@@ -225,6 +238,46 @@ func TestEnsurePlugins_SkipsInstalled(t *testing.T) {
 	}
 	if enabled["skill-creator@claude-plugins-official"] != true {
 		t.Errorf("newly-installed plugin not enabled: %v", enabled)
+	}
+}
+
+func TestEnsurePlugins_RemovedPluginIsDisabled(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Prior boot installed + enabled three plugins.
+	writeInstalledPlugins(t, home,
+		"superpowers@claude-plugins-official",
+		"skill-creator@claude-plugins-official",
+		"code-simplifier@claude-plugins-official")
+	existing := `{"enabledPlugins":{` +
+		`"superpowers@claude-plugins-official":true,` +
+		`"skill-creator@claude-plugins-official":true,` +
+		`"code-simplifier@claude-plugins-official":true}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// New config drops code-simplifier (baseConfig lists only the first two).
+	rr := &recordingRunner{}
+	if err := ensurePlugins(context.Background(), baseConfig(home), rr.run); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing reinstalled (all already present), and the dropped plugin is now
+	// disabled while the kept ones stay enabled.
+	if len(installCalls(rr.calls)) != 0 {
+		t.Errorf("expected no installs (all present), got %v", installCalls(rr.calls))
+	}
+	enabled, _ := readSettings(t, home)["enabledPlugins"].(map[string]any)
+	if enabled["code-simplifier@claude-plugins-official"] != false {
+		t.Errorf("removed plugin should be disabled, got: %v", enabled["code-simplifier@claude-plugins-official"])
+	}
+	if enabled["superpowers@claude-plugins-official"] != true ||
+		enabled["skill-creator@claude-plugins-official"] != true {
+		t.Errorf("kept plugins should remain enabled: %v", enabled)
 	}
 }
 

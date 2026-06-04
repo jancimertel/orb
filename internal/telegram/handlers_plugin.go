@@ -31,7 +31,7 @@ func (r *Router) handlePlugins(ctx *th.Context, u telego.Update) error {
 	}
 	if len(plugins) == 0 {
 		return r.reply(ctx, chatID,
-			"no plugins installed.\n\nSet ENABLE_PLUGINS (comma-separated "+
+			"no plugins installed.\n\nSet PLUGINS (comma-separated "+
 				"<plugin>@<marketplace> keys) and restart the bot.")
 	}
 

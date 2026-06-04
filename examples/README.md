@@ -58,6 +58,8 @@ official name only accepts the `anthropics` GitHub source, not a local path),
 so the **first** start needs network; it's idempotent afterwards and plugin
 files persist on the `claude-home` volume under `.claude/plugins`.
 
-Override the set with the `ENABLE_PLUGINS` env var (comma-separated
+Override the set with the `PLUGINS` env var (comma-separated
 `<plugin>@<marketplace>` keys) and the source with `PLUGIN_MARKETPLACE_SOURCE`;
-no rebuild is needed to change which plugins are active — just restart.
+no rebuild is needed to change which plugins are active — just restart. `PLUGINS`
+is authoritative: removing a key and restarting disables that plugin (only the
+listed plugins load), so a non-empty list must include every plugin you want on.

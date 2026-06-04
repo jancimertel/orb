@@ -156,7 +156,7 @@ func run() error {
 		CLIPath:           cfg.ClaudeCLI,
 		HomeDir:           cfg.HomeDir,
 		MarketplaceSource: cfg.PluginMarketplaceSource,
-		Plugins:           cfg.EnabledPlugins,
+		Plugins:           cfg.Plugins,
 		Logger:            logger,
 	}); err != nil {
 		logger.Warn("ensure plugins failed", "err", err)
