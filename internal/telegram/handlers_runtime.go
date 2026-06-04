@@ -9,6 +9,7 @@ import (
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 
+	"github.com/jancimertel/orb/internal/catalog"
 	"github.com/jancimertel/orb/internal/state"
 )
 
@@ -64,6 +65,16 @@ var availableModels = []modelEntry{
 type modelEntry struct {
 	id    string
 	label string
+}
+
+// FallbackModels exposes the curated list as catalog.Model values for use as the
+// provider's offline fallback. availableModels stays the single source of truth.
+func FallbackModels() []catalog.Model {
+	out := make([]catalog.Model, len(availableModels))
+	for i, m := range availableModels {
+		out[i] = catalog.Model{ID: m.id, Label: m.label}
+	}
+	return out
 }
 
 const (
@@ -493,4 +504,3 @@ func humanDuration(d time.Duration) string {
 		return fmt.Sprintf("%ds", s)
 	}
 }
-
