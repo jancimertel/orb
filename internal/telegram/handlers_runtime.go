@@ -50,8 +50,11 @@ Runtime
   /status           Active repo, session, model; runner state
   /cancel           Kill the current turn`
 
-// Hard-coded model catalog. Keep in sync with Anthropic's current lineup.
+// Hard-coded model catalog. Used as-is when MODELS_API_KEY is unset; otherwise
+// it is the fallback the catalog provider serves when the live /v1/models call
+// is unavailable. Keep in sync with Anthropic's current lineup.
 var availableModels = []modelEntry{
+	{id: "claude-opus-4-8", label: "Opus 4.8"},
 	{id: "claude-opus-4-7", label: "Opus 4.7"},
 	{id: "claude-sonnet-4-6", label: "Sonnet 4.6"},
 	{id: "claude-haiku-4-5-20251001", label: "Haiku 4.5"},
