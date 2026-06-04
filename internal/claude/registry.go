@@ -49,6 +49,7 @@ func NewRegistry(cfg RegistryConfig) *Registry {
 type TurnOpts struct {
 	CWD       string // workspace path; defaults to RegistryConfig.ScratchDir
 	Model     string // defaults to RegistryConfig.DefaultModel
+	Effort    string // optional; maps to --effort. Empty = model default.
 	SessionID string // passed as --resume on a fresh spawn
 
 	// SystemPromptAppend is the active agent's body, forwarded to the CLI
@@ -99,6 +100,7 @@ func (reg *Registry) StartTurn(chatID int64, opts TurnOpts) (*Turn, error) {
 			HomeDir:            reg.cfg.HomeDir,
 			APIKey:             reg.cfg.APIKey,
 			Model:              model,
+			Effort:             opts.Effort,
 			SessionID:          opts.SessionID,
 			HookBinary:         reg.cfg.HookBinary,
 			ApprovalSocket:     reg.cfg.ApprovalSocket,
@@ -112,6 +114,7 @@ func (reg *Registry) StartTurn(chatID int64, opts TurnOpts) (*Turn, error) {
 			"chat_id", chatID,
 			"cwd", cwd,
 			"model", model,
+			"effort", opts.Effort,
 			"resume", opts.SessionID != "",
 			"system_prompt_append_chars", len(opts.SystemPromptAppend),
 		)
