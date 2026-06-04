@@ -146,11 +146,11 @@ func reconcileEnabledPlugins(homeDir string, desired []string) error {
 
 // PluginConfig configures EnsurePlugins.
 type PluginConfig struct {
-	CLIPath           string   // path to the claude CLI (e.g. "claude")
-	HomeDir           string   // HOME for the CLI; also where plugin state lives (/data)
-	MarketplaceSource string   // source for `claude plugin marketplace add` (e.g. "anthropics/claude-plugins-official")
-	Plugins           []string // "<plugin>@<marketplace>" keys to install + enable
-	Logger            *slog.Logger
+	CLIPath            string   // path to the claude CLI (e.g. "claude")
+	HomeDir            string   // HOME for the CLI; also where plugin state lives (/data)
+	MarketplaceSources []string // sources for `claude plugin marketplace add` (e.g. "anthropics/claude-plugins-official")
+	Plugins            []string // "<plugin>@<marketplace>" keys to install + enable
+	Logger             *slog.Logger
 }
 
 // commandRunner runs an external command with HOME=home and returns combined
@@ -182,13 +182,16 @@ func ensurePlugins(ctx context.Context, cfg PluginConfig, run commandRunner) err
 		logger = slog.Default()
 	}
 
-	// 1. Register the marketplace from its source so installs can resolve.
-	//    Best-effort: a prior boot may already have registered it.
-	mctx, mcancel := context.WithTimeout(ctx, 60*time.Second)
-	if out, err := run(mctx, cfg.HomeDir, cfg.CLIPath, "plugin", "marketplace", "add", cfg.MarketplaceSource); err != nil {
-		logger.Warn("plugin marketplace add failed", "source", cfg.MarketplaceSource, "err", err, "output", string(out))
+	// 1. Register each configured marketplace source so installs can resolve.
+	//    Best-effort: a prior boot may already have registered them, and one
+	//    bad source must not block the others.
+	for _, src := range cfg.MarketplaceSources {
+		mctx, mcancel := context.WithTimeout(ctx, 60*time.Second)
+		if out, err := run(mctx, cfg.HomeDir, cfg.CLIPath, "plugin", "marketplace", "add", src); err != nil {
+			logger.Warn("plugin marketplace add failed", "source", src, "err", err, "output", string(out))
+		}
+		mcancel()
 	}
-	mcancel()
 
 	// 2. Install each plugin that isn't already present; track what's present.
 	var present []string

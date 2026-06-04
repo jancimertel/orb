@@ -171,9 +171,9 @@ func (r *recordingRunner) run(ctx context.Context, home, name string, args ...st
 
 func baseConfig(home string) PluginConfig {
 	return PluginConfig{
-		CLIPath:           "claude",
-		HomeDir:           home,
-		MarketplaceSource: "anthropics/claude-plugins-official",
+		CLIPath:            "claude",
+		HomeDir:            home,
+		MarketplaceSources: []string{"anthropics/claude-plugins-official"},
 		Plugins: []string{
 			"superpowers@claude-plugins-official",
 			"skill-creator@claude-plugins-official",
@@ -186,6 +186,16 @@ func installCalls(calls [][]string) []string {
 	for _, c := range calls {
 		if len(c) >= 3 && c[0] == "plugin" && c[1] == "install" {
 			out = append(out, c[2])
+		}
+	}
+	return out
+}
+
+func marketplaceAddCalls(calls [][]string) []string {
+	var out []string
+	for _, c := range calls {
+		if len(c) >= 4 && c[0] == "plugin" && c[1] == "marketplace" && c[2] == "add" {
+			out = append(out, c[3])
 		}
 	}
 	return out
@@ -309,6 +319,31 @@ func TestEnsurePlugins_MarketplaceFailureIsNonFatal(t *testing.T) {
 	// Installs are still attempted despite the marketplace add failing.
 	if len(installCalls(rr.calls)) != 2 {
 		t.Errorf("expected installs attempted after marketplace failure: %v", rr.calls)
+	}
+}
+
+func TestEnsurePlugins_MultipleMarketplaces(t *testing.T) {
+	home := t.TempDir()
+	rr := &recordingRunner{}
+	cfg := baseConfig(home)
+	cfg.MarketplaceSources = []string{
+		"anthropics/claude-plugins-official",
+		"someorg/extra-marketplace",
+	}
+
+	if err := ensurePlugins(context.Background(), cfg, rr.run); err != nil {
+		t.Fatal(err)
+	}
+
+	got := marketplaceAddCalls(rr.calls)
+	want := []string{"anthropics/claude-plugins-official", "someorg/extra-marketplace"}
+	if len(got) != len(want) {
+		t.Fatalf("marketplace add calls = %v, want %v", got, want)
+	}
+	for i, src := range want {
+		if got[i] != src {
+			t.Errorf("marketplace add[%d] = %q, want %q", i, got[i], src)
+		}
 	}
 }
 

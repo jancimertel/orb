@@ -37,8 +37,9 @@ func TestLoad_PluginsDefault(t *testing.T) {
 		}
 	}
 
-	if cfg.PluginMarketplaceSource != "anthropics/claude-plugins-official" {
-		t.Errorf("PluginMarketplaceSource = %q, want anthropics/claude-plugins-official", cfg.PluginMarketplaceSource)
+	if len(cfg.PluginMarketplaceSources) != 1 ||
+		cfg.PluginMarketplaceSources[0] != "anthropics/claude-plugins-official" {
+		t.Errorf("PluginMarketplaceSources = %v, want [anthropics/claude-plugins-official]", cfg.PluginMarketplaceSources)
 	}
 }
 
@@ -58,6 +59,26 @@ func TestLoad_PluginsOverride(t *testing.T) {
 	for i, p := range want {
 		if cfg.Plugins[i] != p {
 			t.Errorf("Plugins[%d] = %q, want %q", i, cfg.Plugins[i], p)
+		}
+	}
+}
+
+func TestLoad_MarketplaceSourcesOverride(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("PLUGIN_MARKETPLACE_SOURCES", "anthropics/claude-plugins-official,someorg/extra")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"anthropics/claude-plugins-official", "someorg/extra"}
+	if len(cfg.PluginMarketplaceSources) != len(want) {
+		t.Fatalf("PluginMarketplaceSources = %v, want %v", cfg.PluginMarketplaceSources, want)
+	}
+	for i, s := range want {
+		if cfg.PluginMarketplaceSources[i] != s {
+			t.Errorf("PluginMarketplaceSources[%d] = %q, want %q", i, cfg.PluginMarketplaceSources[i], s)
 		}
 	}
 }

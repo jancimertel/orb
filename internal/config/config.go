@@ -43,11 +43,14 @@ type Config struct {
 	// restart.
 	Plugins []string `env:"PLUGINS" envSeparator:"," envDefault:"superpowers@claude-plugins-official,skill-creator@claude-plugins-official,code-simplifier@claude-plugins-official"`
 
-	// PluginMarketplaceSource is the source passed to `claude plugin
-	// marketplace add` at startup. The official marketplace name is reserved
-	// and only accepts the anthropics GitHub source, so this fetches over the
-	// network on first boot (idempotent afterwards).
-	PluginMarketplaceSource string `env:"PLUGIN_MARKETPLACE_SOURCE" envDefault:"anthropics/claude-plugins-official"`
+	// PluginMarketplaceSources are the sources passed to `claude plugin
+	// marketplace add` at startup (comma-separated). Each registers a
+	// marketplace that PLUGINS keys can reference via their "@<marketplace>"
+	// suffix. The official marketplace name is reserved and only accepts the
+	// anthropics GitHub source, so the default fetches over the network on first
+	// boot (idempotent afterwards). Add more sources to install plugins from
+	// other marketplaces.
+	PluginMarketplaceSources []string `env:"PLUGIN_MARKETPLACE_SOURCES" envSeparator:"," envDefault:"anthropics/claude-plugins-official"`
 
 	// ExamplesDir points at a read-only `.claude` tree baked into the
 	// container image (agents/, commands/, jobs/). On startup the bot seeds

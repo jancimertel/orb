@@ -59,7 +59,10 @@ so the **first** start needs network; it's idempotent afterwards and plugin
 files persist on the `claude-home` volume under `.claude/plugins`.
 
 Override the set with the `PLUGINS` env var (comma-separated
-`<plugin>@<marketplace>` keys) and the source with `PLUGIN_MARKETPLACE_SOURCE`;
-no rebuild is needed to change which plugins are active — just restart. `PLUGINS`
-is authoritative: removing a key and restarting disables that plugin (only the
-listed plugins load), so a non-empty list must include every plugin you want on.
+`<plugin>@<marketplace>` keys) and the marketplaces with
+`PLUGIN_MARKETPLACE_SOURCES` (comma-separated — add more to install plugins from
+other marketplaces, then reference them via the `@<marketplace>` suffix in
+`PLUGINS`); no rebuild is needed to change which plugins are active — just
+restart. `PLUGINS` is authoritative: removing a key and restarting disables that
+plugin (only the listed plugins load), so a non-empty list must include every
+plugin you want on.
